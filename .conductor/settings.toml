@@ -7,6 +7,6 @@ run_mode = "concurrent"
 
 [scripts.run.dev]
 available_in = ["local"]
-command = "PUBLIC_BASE_URL=http://localhost:$CONDUCTOR_PORT npm run dev -- --port $CONDUCTOR_PORT"
+command = "npx tsx scripts/seed-dev-voter.ts && PUBLIC_BASE_URL=http://localhost:$CONDUCTOR_PORT npm run dev -- --port $CONDUCTOR_PORT"
 default = true
 icon = "play"
