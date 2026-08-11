@@ -104,6 +104,39 @@ describe("Stage voting", () => {
     expect(lastCallBody).toEqual({ voteId: "vote1", comment: "too busy", voterName: "Kevin" });
   });
 
+  it("guards against a rapid double-click on thumbs-up firing two votes", async () => {
+    const user = userEvent.setup();
+    const onVoteCast = vi.fn();
+    // Give the POST a small artificial delay so the second click of the double-click
+    // lands while the first request is still in flight — this is the exact race the
+    // isVoting guard exists to close. Without the guard, both clicks would fire their
+    // own POST and double-count the vote.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.startsWith("/api/")) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return new Response(JSON.stringify({ vote: { id: "vote1" } }), { status: 201 });
+        }
+        return realFetch(url, init);
+      })
+    );
+    render(
+      <Stage
+        variation={variation}
+        voterId="voter1"
+        voterStatus="active"
+        onVoteCast={onVoteCast}
+        onCommentSubmit={() => {}}
+      />
+    );
+
+    await user.dblClick(screen.getByRole("button", { name: /thumbs up/i }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(onVoteCast).toHaveBeenCalledTimes(1);
+  });
+
   it("hides voting controls and shows a read-only notice for archived voters", () => {
     render(
       <Stage

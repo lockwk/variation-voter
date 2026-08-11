@@ -92,44 +92,60 @@ function VotingPanel({
   const [pendingVoteId, setPendingVoteId] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [voterName, setVoterName] = useState("");
+  // Guards against rapid double-clicks firing two independent in-flight requests
+  // for the same action (two POSTs double-counting a vote, or two PATCHes racing
+  // on the same vote's comment).
+  const [isVoting, setIsVoting] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   async function castVote(direction: "up" | "down") {
-    onVoteCast(variation.id, direction);
-    const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ direction }),
-    });
-    const { vote } = await response.json();
-    setPendingVoteId(vote.id);
+    if (isVoting) return;
+    setIsVoting(true);
+    try {
+      onVoteCast(variation.id, direction);
+      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ direction }),
+      });
+      const { vote } = await response.json();
+      setPendingVoteId(vote.id);
+    } finally {
+      setIsVoting(false);
+    }
   }
 
   async function submitComment() {
-    if (!pendingVoteId || !comment.trim()) return;
-    onCommentSubmit(variation.id, comment.trim(), voterName.trim() || null);
-    // PATCH the same vote the click already created — never a second POST,
-    // which would double-count the vote (see Task 12).
-    await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        voteId: pendingVoteId,
-        comment: comment.trim(),
-        voterName: voterName.trim() || undefined,
-      }),
-    });
-    setComment("");
-    setVoterName("");
-    setPendingVoteId(null);
+    if (!pendingVoteId || !comment.trim() || isSubmittingComment) return;
+    setIsSubmittingComment(true);
+    try {
+      onCommentSubmit(variation.id, comment.trim(), voterName.trim() || null);
+      // PATCH the same vote the click already created — never a second POST,
+      // which would double-count the vote (see Task 12).
+      await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          voteId: pendingVoteId,
+          comment: comment.trim(),
+          voterName: voterName.trim() || undefined,
+        }),
+      });
+      setComment("");
+      setVoterName("");
+      setPendingVoteId(null);
+    } finally {
+      setIsSubmittingComment(false);
+    }
   }
 
   return (
     <div className="mt-3">
       <div className="flex gap-2">
-        <Button aria-label="Thumbs up" onClick={() => castVote("up")}>
+        <Button aria-label="Thumbs up" isLoading={isVoting} onClick={() => castVote("up")}>
           <ThumbsUp /> {variation.up}
         </Button>
-        <Button aria-label="Thumbs down" onClick={() => castVote("down")}>
+        <Button aria-label="Thumbs down" isLoading={isVoting} onClick={() => castVote("down")}>
           <ThumbsDown /> {variation.down}
         </Button>
       </div>
@@ -147,7 +163,9 @@ function VotingPanel({
             value={voterName}
             onChange={(value) => setVoterName(value)}
           />
-          <Button onClick={submitComment}>Submit</Button>
+          <Button isLoading={isSubmittingComment} onClick={submitComment}>
+            Submit
+          </Button>
         </div>
       )}
     </div>
