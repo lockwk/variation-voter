@@ -47,7 +47,7 @@ export function VariationList({
           onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
         >
           {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
-            <ButtonGroupItem key={mode} id={mode}>
+            <ButtonGroupItem key={mode} id={mode} className="selected:bg-active selected:text-primary">
               {SORT_LABELS[mode]}
             </ButtonGroupItem>
           ))}
