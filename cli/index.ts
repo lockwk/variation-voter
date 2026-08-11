@@ -1,0 +1,70 @@
+#!/usr/bin/env node
+import { Command } from "commander";
+import {
+  createVoterRequest,
+  addVariationRequest,
+  listVotersRequest,
+  closeVoterRequest,
+  deleteVoterRequest,
+} from "./api-client";
+import { getCliConfig } from "./config";
+import { resolveVariationInput } from "./resolve-variation-input";
+
+const program = new Command();
+program.name("voter");
+
+program
+  .command("create <title>")
+  .option("--description <description>")
+  .option("--expires-in-days <days>", "override the default 7-day expiry", (v) => Number(v))
+  .action(async (title, options) => {
+    const result = await createVoterRequest({
+      title,
+      description: options.description,
+      expiresInDays: options.expiresInDays,
+    });
+    console.log(`Created voter ${result.voter.id}`);
+    console.log(result.shareUrl);
+  });
+
+program
+  .command("add <voterId>")
+  .requiredOption("--title <title>")
+  .option("--description <description>")
+  .option("--url <url>")
+  .option("--image <url>")
+  .option("--embed <html>")
+  .action(async (voterId, options) => {
+    const [kind, src] = resolveVariationInput(options);
+    const result = await addVariationRequest(voterId, {
+      title: options.title,
+      description: options.description,
+      kind,
+      src,
+    });
+    console.log(`Added variation ${result.variation.id} (${kind})`);
+  });
+
+program.command("list").action(async () => {
+  const result = await listVotersRequest();
+  for (const voter of result.voters) {
+    console.log(`${voter.id}  ${voter.title}  [${voter.status}]  expires ${voter.expiresAt}`);
+  }
+});
+
+program.command("link <voterId>").action((voterId) => {
+  const { baseUrl } = getCliConfig();
+  console.log(`${baseUrl}/v/${voterId}`);
+});
+
+program.command("close <voterId>").action(async (voterId) => {
+  await closeVoterRequest(voterId);
+  console.log(`Archived voter ${voterId}`);
+});
+
+program.command("delete <voterId>").action(async (voterId) => {
+  await deleteVoterRequest(voterId);
+  console.log(`Deleted voter ${voterId}`);
+});
+
+program.parseAsync();

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "voter": "tsx cli/index.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
