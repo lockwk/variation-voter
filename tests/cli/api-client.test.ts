@@ -1,15 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createVoterRequest, addVariationRequest, listVotersRequest } from "@/cli/api-client";
 
+// Capture the real fetch before any test stubs it. The Neon HTTP driver used by
+// tests/setup.ts's global `afterEach` (`db.delete(...)`) makes its own fetch calls to
+// clean up the DB between tests — a blanket fetch mock would hijack those too and break
+// DB cleanup, so the mock below only intercepts calls to the admin API and delegates
+// everything else (like Neon's queries) to the real fetch.
+const realFetch = global.fetch;
+
 beforeEach(() => {
   vi.stubEnv("VARIATION_VOTER_URL", "https://example.vercel.app/");
   vi.stubEnv("VARIATION_VOTER_ADMIN_TOKEN", "secret123");
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 201 }))
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.startsWith("https://example.vercel.app/api/admin/")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 201 });
+      }
+      return realFetch(url, init);
+    })
   );
 });
-afterEach(async () => {
+afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
@@ -37,7 +49,12 @@ describe("cli/api-client", () => {
   it("throws with the response body on a non-2xx response", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("bad request", { status: 400 }))
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.startsWith("https://example.vercel.app/api/admin/")) {
+          return new Response("bad request", { status: 400 });
+        }
+        return realFetch(url, init);
+      })
     );
     await expect(listVotersRequest()).rejects.toThrow(/400/);
   });
