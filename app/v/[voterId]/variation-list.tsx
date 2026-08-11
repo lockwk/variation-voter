@@ -41,6 +41,8 @@ export function VariationList({
         <h1 className="text-lg font-semibold">{voterTitle}</h1>
         <ButtonGroup
           className="mt-3"
+          size="sm"
+          disallowEmptySelection
           selectedKeys={[sortMode]}
           onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
         >

@@ -84,4 +84,26 @@ describe("VariationList", () => {
     await user.click(screen.getByText("Top"));
     expect(onSortModeChange).toHaveBeenCalledWith("top");
   });
+
+  it("does not clear the selection when the already-active sort button is clicked", async () => {
+    const user = userEvent.setup();
+    const onSortModeChange = vi.fn();
+    render(
+      <VariationList
+        voterTitle="Nav refresh"
+        variations={[]}
+        selectedId={null}
+        sortMode={"all" as SortMode}
+        onSelect={() => {}}
+        onSortModeChange={onSortModeChange}
+      />
+    );
+    await user.click(screen.getByText("All"));
+    // react-aria's single-selection toggle group re-fires onSelectionChange
+    // with the same key rather than being a true no-op, but it must never
+    // clear the selection (which would call onSortModeChange(undefined)).
+    for (const call of onSortModeChange.mock.calls) {
+      expect(call[0]).toBe("all");
+    }
+  });
 });
