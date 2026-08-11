@@ -14,12 +14,14 @@ export function Stage({
   voterId,
   voterStatus,
   onVoteCast,
+  onVoteCastFailed,
   onCommentSubmit,
 }: {
   variation: VariationWithAggregates | null;
   voterId: string;
   voterStatus: "active" | "archived";
   onVoteCast: (variationId: string, direction: "up" | "down") => void;
+  onVoteCastFailed: (variationId: string, direction: "up" | "down") => void;
   onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
 }) {
   if (!variation) {
@@ -49,9 +51,11 @@ export function Stage({
           </p>
         ) : (
           <VotingPanel
+            key={variation.id}
             voterId={voterId}
             variation={variation}
             onVoteCast={onVoteCast}
+            onVoteCastFailed={onVoteCastFailed}
             onCommentSubmit={onCommentSubmit}
           />
         )}
@@ -82,11 +86,13 @@ function VotingPanel({
   voterId,
   variation,
   onVoteCast,
+  onVoteCastFailed,
   onCommentSubmit,
 }: {
   voterId: string;
   variation: VariationWithAggregates;
   onVoteCast: (variationId: string, direction: "up" | "down") => void;
+  onVoteCastFailed: (variationId: string, direction: "up" | "down") => void;
   onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
 }) {
   const [pendingVoteId, setPendingVoteId] = useState<string | null>(null);
@@ -97,19 +103,32 @@ function VotingPanel({
   // on the same vote's comment).
   const [isVoting, setIsVoting] = useState(false);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   async function castVote(direction: "up" | "down") {
     if (isVoting) return;
     setIsVoting(true);
+    setVoteError(null);
+    onVoteCast(variation.id, direction);
     try {
-      onVoteCast(variation.id, direction);
       const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ direction }),
       });
+      if (!response.ok) {
+        // Roll back the optimistic bump above — a failed vote must never leave a
+        // permanently-wrong local count.
+        onVoteCastFailed(variation.id, direction);
+        setVoteError("Couldn't record your vote. Please try again.");
+        return;
+      }
       const { vote } = await response.json();
       setPendingVoteId(vote.id);
+    } catch {
+      onVoteCastFailed(variation.id, direction);
+      setVoteError("Couldn't record your vote. Please try again.");
     } finally {
       setIsVoting(false);
     }
@@ -118,11 +137,11 @@ function VotingPanel({
   async function submitComment() {
     if (!pendingVoteId || !comment.trim() || isSubmittingComment) return;
     setIsSubmittingComment(true);
+    setCommentError(null);
     try {
-      onCommentSubmit(variation.id, comment.trim(), voterName.trim() || null);
       // PATCH the same vote the click already created — never a second POST,
       // which would double-count the vote (see Task 12).
-      await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
+      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -131,9 +150,16 @@ function VotingPanel({
           voterName: voterName.trim() || undefined,
         }),
       });
+      if (!response.ok) {
+        setCommentError("Couldn't save your comment. Please try again.");
+        return;
+      }
+      onCommentSubmit(variation.id, comment.trim(), voterName.trim() || null);
       setComment("");
       setVoterName("");
       setPendingVoteId(null);
+    } catch {
+      setCommentError("Couldn't save your comment. Please try again.");
     } finally {
       setIsSubmittingComment(false);
     }
@@ -149,6 +175,7 @@ function VotingPanel({
           <ThumbsDown /> {variation.down}
         </Button>
       </div>
+      {voteError && <p className="mt-2 text-sm text-red-600">{voteError}</p>}
       {pendingVoteId && (
         <div className="mt-3 flex flex-col gap-2 max-w-sm">
           <TextArea
@@ -166,6 +193,7 @@ function VotingPanel({
           <Button isLoading={isSubmittingComment} onClick={submitComment}>
             Submit
           </Button>
+          {commentError && <p className="text-sm text-red-600">{commentError}</p>}
         </div>
       )}
     </div>
@@ -190,7 +218,12 @@ function VariationMedia({ variation }: { variation: VariationWithAggregates }) {
   return (
     <div
       className="p-4"
-      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(variation.src) }}
+      dangerouslySetInnerHTML={{
+        __html: DOMPurify.sanitize(variation.src, {
+          ADD_TAGS: ["iframe"],
+          ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "loading", "referrerpolicy"],
+        }),
+      }}
     />
   );
 }

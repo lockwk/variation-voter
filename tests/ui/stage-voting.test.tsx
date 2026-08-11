@@ -60,6 +60,7 @@ describe("Stage voting", () => {
         voterId="voter1"
         voterStatus="active"
         onVoteCast={onVoteCast}
+        onVoteCastFailed={() => {}}
         onCommentSubmit={() => {}}
       />
     );
@@ -83,6 +84,7 @@ describe("Stage voting", () => {
         voterId="voter1"
         voterStatus="active"
         onVoteCast={() => {}}
+        onVoteCastFailed={() => {}}
         onCommentSubmit={onCommentSubmit}
       />
     );
@@ -127,6 +129,7 @@ describe("Stage voting", () => {
         voterId="voter1"
         voterStatus="active"
         onVoteCast={onVoteCast}
+        onVoteCastFailed={() => {}}
         onCommentSubmit={() => {}}
       />
     );
@@ -137,6 +140,42 @@ describe("Stage voting", () => {
     expect(onVoteCast).toHaveBeenCalledTimes(1);
   });
 
+  it("rolls back the optimistic vote and shows an error when the POST fails", async () => {
+    const user = userEvent.setup();
+    const onVoteCast = vi.fn();
+    const onVoteCastFailed = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.startsWith("/api/")) {
+          return new Response(JSON.stringify({ error: "forbidden" }), { status: 403 });
+        }
+        return realFetch(url, init);
+      })
+    );
+    render(
+      <Stage
+        variation={variation}
+        voterId="voter1"
+        voterStatus="active"
+        onVoteCast={onVoteCast}
+        onVoteCastFailed={onVoteCastFailed}
+        onCommentSubmit={() => {}}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /thumbs up/i }));
+
+    // The optimistic bump fires on click, but a failed POST must reverse it via
+    // onVoteCastFailed, so the displayed count never stays permanently wrong.
+    expect(onVoteCast).toHaveBeenCalledWith("a", "up");
+    expect(onVoteCastFailed).toHaveBeenCalledWith("a", "up");
+    // ...and the visitor must see that something went wrong.
+    expect(screen.getByText(/couldn.t record your vote/i)).toBeInTheDocument();
+    // No comment form should appear — there's no confirmed vote to attach one to.
+    expect(screen.queryByLabelText(/why/i)).not.toBeInTheDocument();
+  });
+
   it("hides voting controls and shows a read-only notice for archived voters", () => {
     render(
       <Stage
@@ -144,6 +183,7 @@ describe("Stage voting", () => {
         voterId="voter1"
         voterStatus="archived"
         onVoteCast={() => {}}
+        onVoteCastFailed={() => {}}
         onCommentSubmit={() => {}}
       />
     );

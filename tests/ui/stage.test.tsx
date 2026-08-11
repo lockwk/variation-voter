@@ -31,6 +31,7 @@ const stubStageProps = {
   voterId: "voter1",
   voterStatus: "active" as const,
   onVoteCast: () => {},
+  onVoteCastFailed: () => {},
   onCommentSubmit: () => {},
 };
 
@@ -65,5 +66,37 @@ describe("Stage", () => {
     render(<Stage variation={base} {...stubStageProps} />);
     expect(screen.getByText("too busy")).toBeInTheDocument();
     expect(screen.getByText("Kevin")).toBeInTheDocument();
+  });
+
+  it("renders an iframe embed for kind 'embed' instead of stripping it", () => {
+    const { container } = render(
+      <Stage
+        variation={{
+          ...base,
+          kind: "embed",
+          src: '<iframe src="https://www.youtube.com/embed/xyz" allowfullscreen></iframe>',
+        }}
+        {...stubStageProps}
+      />
+    );
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe).toHaveAttribute("src", "https://www.youtube.com/embed/xyz");
+  });
+
+  it("still strips dangerous attributes like onerror from embed content", () => {
+    const { container } = render(
+      <Stage
+        variation={{
+          ...base,
+          kind: "embed",
+          src: '<img src="x" onerror="alert(1)">',
+        }}
+        {...stubStageProps}
+      />
+    );
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img).not.toHaveAttribute("onerror");
   });
 });

@@ -38,6 +38,24 @@ export function VoterShell({
     );
   }
 
+  // Reverses recordOptimisticVote when the server rejects the vote (e.g. the
+  // voter got archived mid-session), so a failed request never leaves the
+  // displayed count permanently wrong.
+  function rollBackOptimisticVote(variationId: string, direction: "up" | "down") {
+    setVariations((prev) =>
+      prev.map((v) =>
+        v.id === variationId
+          ? {
+              ...v,
+              up: direction === "up" ? v.up - 1 : v.up,
+              down: direction === "down" ? v.down - 1 : v.down,
+              score: direction === "up" ? v.score - 1 : v.score + 1,
+            }
+          : v
+      )
+    );
+  }
+
   function recordComment(variationId: string, comment: string, voterName: string | null) {
     setVariations((prev) =>
       prev.map((v) =>
@@ -69,6 +87,7 @@ export function VoterShell({
         voterId={voter.id}
         voterStatus={voter.status}
         onVoteCast={recordOptimisticVote}
+        onVoteCastFailed={rollBackOptimisticVote}
         onCommentSubmit={recordComment}
       />
     </div>

@@ -168,6 +168,18 @@ describe("purgeExpiredAndArchivedVoters", () => {
     expect(deletedIds).toContain(fresh.id); // both are "past grace" relative to two days from now
   });
 
+  it("keeps a voter archived within the grace window", async () => {
+    const recentlyArchived = await createVoter(db, { title: "recently archived" });
+    await closeVoter(db, recentlyArchived.id);
+
+    // "now" is the real current time, and the grace window (1 hour) has not yet
+    // elapsed since archivedAt (also just now) — so this voter must survive.
+    const deletedIds = await purgeExpiredAndArchivedVoters(db, new Date(), 60 * 60 * 1000);
+
+    expect(deletedIds).not.toContain(recentlyArchived.id);
+    expect(await getVoterDetail(db, recentlyArchived.id)).not.toBeNull();
+  });
+
   it("keeps active, unexpired voters", async () => {
     const voter = await createVoter(db, { title: "keep me" });
     const deletedIds = await purgeExpiredAndArchivedVoters(db, new Date(), 86_400_000);
