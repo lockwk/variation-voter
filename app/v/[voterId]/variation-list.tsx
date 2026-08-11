@@ -36,8 +36,8 @@ export function VariationList({
   const sorted = sortVariations(variations, sortMode);
 
   return (
-    <nav className="w-72 shrink-0 border-r border-gray-200 flex flex-col">
-      <div className="p-4 border-b border-gray-200">
+    <nav className="w-72 shrink-0 border-r border-secondary flex flex-col">
+      <div className="p-4 border-b border-secondary">
         <h1 className="text-lg font-semibold">{voterTitle}</h1>
         <div className="mt-3 flex gap-1">
           {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
@@ -59,7 +59,7 @@ export function VariationList({
               type="button"
               onClick={() => onSelect(variation.id)}
               aria-current={variation.id === selectedId}
-              className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 aria-[current=true]:bg-gray-100"
+              className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-primary_hover aria-[current=true]:bg-active"
             >
               <span className="truncate">{variation.title}</span>
               <span className="flex gap-1 shrink-0">
