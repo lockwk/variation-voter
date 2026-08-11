@@ -7,6 +7,8 @@ import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { TextArea } from "@/components/base/textarea/textarea";
 import { EmptyState } from "@/components/application/empty-state/empty-state";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { initialsFor } from "@/lib/initials";
 import type { VariationWithAggregates } from "@/db/queries";
 
 export function Stage({
@@ -70,9 +72,12 @@ export function Stage({
         ) : (
           <ul className="space-y-3">
             {variation.comments.map((comment) => (
-              <li key={comment.id} className="text-sm">
-                <span className="font-medium">{comment.voterName ?? "Anonymous"}</span>
-                <p className="text-secondary">{comment.comment}</p>
+              <li key={comment.id} className="flex gap-2 text-sm">
+                <Avatar initials={initialsFor(comment.voterName)} size="xs" />
+                <div>
+                  <span className="font-medium">{comment.voterName ?? "Anonymous"}</span>
+                  <p className="text-secondary">{comment.comment}</p>
+                </div>
               </li>
             ))}
           </ul>

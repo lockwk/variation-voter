@@ -68,6 +68,25 @@ describe("Stage", () => {
     expect(screen.getByText("Kevin")).toBeInTheDocument();
   });
 
+  it("renders an avatar with initials next to a named commenter", () => {
+    render(<Stage variation={base} {...stubStageProps} />);
+    expect(screen.getByText("K")).toBeInTheDocument();
+  });
+
+  it("renders a fallback avatar for an anonymous commenter", () => {
+    render(
+      <Stage
+        variation={{
+          ...base,
+          comments: [{ id: "c2", comment: "no name given", voterName: null, createdAt: new Date() }],
+        }}
+        {...stubStageProps}
+      />
+    );
+    expect(screen.getByText("Anonymous")).toBeInTheDocument();
+    expect(screen.getByText("?")).toBeInTheDocument();
+  });
+
   it("renders an iframe embed for kind 'embed' instead of stripping it", () => {
     const { container } = render(
       <Stage
