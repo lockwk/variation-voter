@@ -14,6 +14,11 @@ describe("createVoterSchema", () => {
     const result = createVoterSchema.safeParse({ title: "x", expiresInDays: 14 });
     expect(result.success).toBe(true);
   });
+
+  it("accepts expiresInDays of 0 (immediate expiry)", () => {
+    const result = createVoterSchema.safeParse({ title: "x", expiresInDays: 0 });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("addVariationSchema", () => {

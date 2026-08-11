@@ -3,7 +3,7 @@ import { z } from "zod";
 export const createVoterSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).optional(),
-  expiresInDays: z.number().int().positive().max(365).optional(),
+  expiresInDays: z.number().int().nonnegative().max(365).optional(),
 });
 
 export const addVariationSchema = z.object({

@@ -44,4 +44,4 @@ npm run db:migrate
 npm run dev
 ```
 
-Run `npx create-variation-voter` instead of the manual `.env.local` setup for a guided walkthrough.
+After cloning, run `node scripts/create.mjs` instead of the manual `.env.local` setup for a guided walkthrough.
