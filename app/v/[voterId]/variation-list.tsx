@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/base/buttons/button";
+import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Badge } from "@/components/base/badges/badges";
 import type { VariationWithAggregates } from "@/db/queries";
 
@@ -39,18 +39,17 @@ export function VariationList({
     <nav className="w-72 shrink-0 border-r border-secondary flex flex-col">
       <div className="p-4 border-b border-secondary">
         <h1 className="text-lg font-semibold">{voterTitle}</h1>
-        <div className="mt-3 flex gap-1">
+        <ButtonGroup
+          className="mt-3"
+          selectedKeys={[sortMode]}
+          onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
+        >
           {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
-            <Button
-              key={mode}
-              size="sm"
-              color={sortMode === mode ? "primary" : "secondary"}
-              onClick={() => onSortModeChange(mode)}
-            >
+            <ButtonGroupItem key={mode} id={mode}>
               {SORT_LABELS[mode]}
-            </Button>
+            </ButtonGroupItem>
           ))}
-        </div>
+        </ButtonGroup>
       </div>
       <ul className="flex-1 overflow-y-auto">
         {sorted.map((variation) => (
