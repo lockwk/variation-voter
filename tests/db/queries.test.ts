@@ -94,6 +94,16 @@ describe("getVoterDetail", () => {
     expect(v.comments[0].comment).toBe("great");
     expect(v.comments[0].voterName).toBe("Kevin");
   });
+
+  it("returns variations ordered by position, not insertion/query order", async () => {
+    const voter = await createVoter(db, { title: "ordering" });
+    const a = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const b = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
+    const c = await addVariation(db, voter.id, { title: "C", kind: "url", src: "https://c" });
+
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations.map((v) => v.id)).toEqual([a.id, b.id, c.id]);
+  });
 });
 
 describe("castVote", () => {

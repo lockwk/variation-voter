@@ -101,7 +101,8 @@ export async function getVoterDetail(db: Database, voterId: string): Promise<Vot
     .from(variations)
     .leftJoin(votes, eq(votes.variationId, variations.id))
     .where(eq(variations.voterId, voterId))
-    .groupBy(variations.id);
+    .groupBy(variations.id)
+    .orderBy(variations.position);
 
   const commentRows = await db
     .select({
