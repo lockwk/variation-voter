@@ -11,6 +11,11 @@ export default defineConfig(() => {
       environment: "node",
       setupFiles: ["./tests/setup.ts"],
       globals: false,
+      // Multiple test files share one live Postgres database, and tests/setup.ts
+      // truncates voters/variations/votes in a global afterEach. Running test
+      // files concurrently lets one file's truncation wipe data out from under
+      // another file's in-flight test, so files must run sequentially.
+      fileParallelism: false,
     },
     resolve: {
       alias: { "@": path.resolve(__dirname, ".") },
