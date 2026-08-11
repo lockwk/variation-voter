@@ -180,7 +180,7 @@ function VotingPanel({
           <ThumbsDown /> {variation.down}
         </Button>
       </div>
-      {voteError && <p className="mt-2 text-sm text-red-600">{voteError}</p>}
+      {voteError && <p className="mt-2 text-sm text-error-primary">{voteError}</p>}
       {pendingVoteId && (
         <div className="mt-3 flex flex-col gap-2 max-w-sm">
           <TextArea
@@ -198,7 +198,7 @@ function VotingPanel({
           <Button isLoading={isSubmittingComment} onClick={submitComment}>
             Submit
           </Button>
-          {commentError && <p className="text-sm text-red-600">{commentError}</p>}
+          {commentError && <p className="text-sm text-error-primary">{commentError}</p>}
         </div>
       )}
     </div>
