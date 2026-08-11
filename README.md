@@ -1,36 +1,47 @@
 # Variation Voter
 
-Spin up a shareable variation-voting environment in seconds — by talking to an
-agent. List design/build variations down the left, let external people (PMs,
-clients, stakeholders, users) vote each one up or down and leave a short comment
-on **why**, and sort the results **All / New / Top**.
+Spin up a shareable voting page for design/build variations in seconds —
+external people vote 👍/👎, leave a short comment, and results aggregate
+server-side. No login for voters; the author authenticates with one shared
+admin token.
 
-Voters are **ephemeral** (they auto-expire after 7 days), **multi-user** (real
-votes aggregated server-side, no login to vote), and **content-agnostic** — a
-variation slot holds a live URL (iframe), an image, or an embed, so you never
-rebuild the thing being voted on.
+## Deploy your own instance
 
-> **Status:** pre-implementation. The approved design lives in
-> [`docs/superpowers/specs/2026-08-10-variation-voter-design.md`](docs/superpowers/specs/2026-08-10-variation-voter-design.md).
-> No application code exists yet.
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/<owner>/<repo>&env=DATABASE_URL,ADMIN_TOKEN,CRON_SECRET,PUBLIC_BASE_URL&envDescription=Neon+connection+string+and+a+shared+admin+token&project-name=variation-voter&repository-name=variation-voter)
 
-## How it works (once built)
+Replace `<owner>/<repo>` above with this repository's actual GitHub path
+once it's pushed.
 
-- **One app, many voters.** A single Next.js app on Vercel + Neon Postgres hosts
-  every voter as rows in a database — creating a voter is an API/CLI call, not a
-  new deployment.
-- **Agent-driven authoring.** You tell an agent "spin one up, put these in it";
-  it calls a small CLI/API (`voter create`, `voter add …`) and hands you a share
-  link.
-- **Self-hostable.** Others run their **own** instance with their **own** free
-  Neon database — nobody shares a backend.
+1. Click the button above (or fork the repo and import it into Vercel yourself).
+2. Create a free [Neon](https://neon.tech) project and copy its connection string into `DATABASE_URL`.
+3. Set `ADMIN_TOKEN` to any long random string — this is the only credential that authorizes voter creation.
+4. Set `CRON_SECRET` to another long random string — Vercel Cron sends it automatically on scheduled cleanup runs.
+5. Set `PUBLIC_BASE_URL` to your deployed URL (e.g. `https://your-app.vercel.app`), used to build share links.
+6. Deploy. Then run migrations once against your database: `npx drizzle-kit migrate` (with `DATABASE_URL` set locally to your Neon connection string).
 
-## Planned stack
+Each self-hosted instance runs against its own Neon database — nobody else's usage ever touches your backend or your bill.
 
-Next.js (App Router) · Neon Postgres · Drizzle ORM · Vercel (hosting + Cron
-cleanup). See the spec for the full data model, agent interface, lifecycle, and
-distribution plan.
+## Using it
 
-## For the agent picking this up
+```bash
+export VARIATION_VOTER_URL=https://your-app.vercel.app
+export VARIATION_VOTER_ADMIN_TOKEN=<your ADMIN_TOKEN>
 
-Start with [`AGENTS.md`](AGENTS.md).
+npm run voter -- create "Nav refresh"
+npm run voter -- add <voterId> --title "Live default" --url https://preview.example/a
+npm run voter -- add <voterId> --title "Option B" --url https://preview.example/b
+npm run voter -- link <voterId>
+```
+
+Send the printed link to whoever needs to weigh in. `npm run voter -- close <voterId>` makes it read-only; `npm run voter -- delete <voterId>` removes it immediately. Otherwise it expires automatically after 7 days.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env.local   # fill in DATABASE_URL, ADMIN_TOKEN, CRON_SECRET
+npm run db:migrate
+npm run dev
+```
+
+After cloning, run `node scripts/create.mjs` instead of the manual `.env.local` setup for a guided walkthrough.
