@@ -17,6 +17,7 @@
     "@react-stately/utils": "^3.12.1",
     "@untitledui/file-icons": "^0.0.9",
     "@untitledui/icons": "^0.0.22",
+    "commander": "^15.0.0",
     "drizzle-orm": "^0.45.2",
     "input-otp": "^1.4.2",
     "isomorphic-dompurify": "^3.22.0",
@@ -46,6 +47,7 @@
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",
     "tailwindcss-react-aria-components": "^2.2.0",
+    "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }
