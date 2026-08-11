@@ -65,4 +65,8 @@ describe("updateVoteSchema", () => {
   it("rejects a missing voteId", () => {
     expect(updateVoteSchema.safeParse({ comment: "too busy" }).success).toBe(false);
   });
+
+  it("rejects a voteId with neither comment nor voterName", () => {
+    expect(updateVoteSchema.safeParse({ voteId: "abc123" }).success).toBe(false);
+  });
 });

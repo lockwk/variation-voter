@@ -19,8 +19,12 @@ export const castVoteSchema = z.object({
   voterName: z.string().trim().max(100).optional(),
 });
 
-export const updateVoteSchema = z.object({
-  voteId: z.string().trim().min(1),
-  comment: z.string().trim().max(1000).optional(),
-  voterName: z.string().trim().max(100).optional(),
-});
+export const updateVoteSchema = z
+  .object({
+    voteId: z.string().trim().min(1),
+    comment: z.string().trim().max(1000).optional(),
+    voterName: z.string().trim().max(100).optional(),
+  })
+  .refine((data) => data.comment !== undefined || data.voterName !== undefined, {
+    message: "Provide a comment or voterName",
+  });
