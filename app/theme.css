@@ -121,17 +121,33 @@
     --color-alpha-white: rgb(255 255 255);
     --color-alpha-black: rgb(0 0 0);
 
-    --color-brand-50: rgb(249 245 255);
-    --color-brand-100: rgb(244 235 255);
-    --color-brand-200: rgb(233 215 254);
-    --color-brand-300: rgb(214 187 251);
-    --color-brand-400: rgb(182 146 246);
-    --color-brand-500: rgb(158 119 237);
-    --color-brand-600: rgb(127 86 217);
-    --color-brand-700: rgb(105 65 198);
-    --color-brand-800: rgb(83 56 158);
-    --color-brand-900: rgb(66 48 125);
-    --color-brand-950: rgb(44 28 95);
+    /* Swapped from Tailwind's default `neutral` scale to `zinc` — the app's base gray-scale token. */
+    --color-neutral-50: var(--color-zinc-50);
+    --color-neutral-100: var(--color-zinc-100);
+    --color-neutral-200: var(--color-zinc-200);
+    --color-neutral-300: var(--color-zinc-300);
+    --color-neutral-400: var(--color-zinc-400);
+    --color-neutral-500: var(--color-zinc-500);
+    --color-neutral-600: var(--color-zinc-600);
+    --color-neutral-700: var(--color-zinc-700);
+    --color-neutral-800: var(--color-zinc-800);
+    --color-neutral-900: var(--color-zinc-900);
+    --color-neutral-950: var(--color-zinc-950);
+
+    /* Retired: the purple brand palette. Every brand-* token now aliases the
+       equivalent zinc stop, so brand/neutral tokens render identically and
+       nothing in the app carries a separate accent color. */
+    --color-brand-50: var(--color-neutral-50);
+    --color-brand-100: var(--color-neutral-100);
+    --color-brand-200: var(--color-neutral-200);
+    --color-brand-300: var(--color-neutral-300);
+    --color-brand-400: var(--color-neutral-400);
+    --color-brand-500: var(--color-neutral-500);
+    --color-brand-600: var(--color-neutral-600);
+    --color-brand-700: var(--color-neutral-700);
+    --color-brand-800: var(--color-neutral-800);
+    --color-brand-900: var(--color-neutral-900);
+    --color-brand-950: var(--color-neutral-950);
 
     /* LIGHT MODE VARIABLES */
 

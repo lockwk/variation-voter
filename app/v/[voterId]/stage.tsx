@@ -7,6 +7,8 @@ import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { TextArea } from "@/components/base/textarea/textarea";
 import { EmptyState } from "@/components/application/empty-state/empty-state";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { initialsFor } from "@/lib/initials";
 import type { VariationWithAggregates } from "@/db/queries";
 
 export function Stage({
@@ -42,11 +44,11 @@ export function Stage({
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto">
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-6 border-b border-secondary">
         <h2 className="text-xl font-semibold">{variation.title}</h2>
-        {variation.description && <p className="text-gray-600 mt-1">{variation.description}</p>}
+        {variation.description && <p className="text-tertiary mt-1">{variation.description}</p>}
         {voterStatus === "archived" ? (
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-sm text-quaternary">
             This voter is closed and read-only — voting is disabled.
           </p>
         ) : (
@@ -60,19 +62,22 @@ export function Stage({
           />
         )}
       </div>
-      <div className="flex-1 min-h-[400px] bg-gray-50">
+      <div className="flex-1 min-h-[400px] bg-secondary">
         <VariationMedia variation={variation} />
       </div>
-      <div className="p-6 border-t border-gray-200">
+      <div className="p-6 border-t border-secondary">
         <h3 className="font-medium mb-3">Comments</h3>
         {variation.comments.length === 0 ? (
-          <p className="text-gray-500 text-sm">No comments yet.</p>
+          <p className="text-quaternary text-sm">No comments yet.</p>
         ) : (
           <ul className="space-y-3">
             {variation.comments.map((comment) => (
-              <li key={comment.id} className="text-sm">
-                <span className="font-medium">{comment.voterName ?? "Anonymous"}</span>
-                <p className="text-gray-700">{comment.comment}</p>
+              <li key={comment.id} className="flex gap-2 text-sm">
+                <Avatar initials={initialsFor(comment.voterName)} size="xs" />
+                <div>
+                  <span className="font-medium">{comment.voterName ?? "Anonymous"}</span>
+                  <p className="text-secondary">{comment.comment}</p>
+                </div>
               </li>
             ))}
           </ul>
@@ -175,7 +180,7 @@ function VotingPanel({
           <ThumbsDown /> {variation.down}
         </Button>
       </div>
-      {voteError && <p className="mt-2 text-sm text-red-600">{voteError}</p>}
+      {voteError && <p className="mt-2 text-sm text-error-primary">{voteError}</p>}
       {pendingVoteId && (
         <div className="mt-3 flex flex-col gap-2 max-w-sm">
           <TextArea
@@ -193,7 +198,7 @@ function VotingPanel({
           <Button isLoading={isSubmittingComment} onClick={submitComment}>
             Submit
           </Button>
-          {commentError && <p className="text-sm text-red-600">{commentError}</p>}
+          {commentError && <p className="text-sm text-error-primary">{commentError}</p>}
         </div>
       )}
     </div>
