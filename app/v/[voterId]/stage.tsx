@@ -105,15 +105,16 @@ function VotingPanel({
   const [voterName, setVoterName] = useState("");
   // Guards against rapid double-clicks firing two independent in-flight requests
   // for the same action (two POSTs double-counting a vote, or two PATCHes racing
-  // on the same vote's comment).
-  const [isVoting, setIsVoting] = useState(false);
+  // on the same vote's comment). Tracks *which* direction is in flight so only
+  // that button shows a loading state.
+  const [pendingDirection, setPendingDirection] = useState<"up" | "down" | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
 
   async function castVote(direction: "up" | "down") {
-    if (isVoting) return;
-    setIsVoting(true);
+    if (pendingDirection) return;
+    setPendingDirection(direction);
     setVoteError(null);
     onVoteCast(variation.id, direction);
     try {
@@ -135,12 +136,21 @@ function VotingPanel({
       onVoteCastFailed(variation.id, direction);
       setVoteError("Couldn't record your vote. Please try again.");
     } finally {
-      setIsVoting(false);
+      setPendingDirection(null);
     }
   }
 
   async function submitComment() {
-    if (!pendingVoteId || !comment.trim() || isSubmittingComment) return;
+    if (!pendingVoteId || isSubmittingComment) return;
+    const trimmedComment = comment.trim();
+    // The comment is optional — with nothing typed, Submit just dismisses the
+    // form instead of silently doing nothing (the vote itself already landed).
+    if (!trimmedComment) {
+      setComment("");
+      setVoterName("");
+      setPendingVoteId(null);
+      return;
+    }
     setIsSubmittingComment(true);
     setCommentError(null);
     try {
@@ -151,7 +161,7 @@ function VotingPanel({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           voteId: pendingVoteId,
-          comment: comment.trim(),
+          comment: trimmedComment,
           voterName: voterName.trim() || undefined,
         }),
       });
@@ -159,7 +169,7 @@ function VotingPanel({
         setCommentError("Couldn't save your comment. Please try again.");
         return;
       }
-      onCommentSubmit(variation.id, comment.trim(), voterName.trim() || null);
+      onCommentSubmit(variation.id, trimmedComment, voterName.trim() || null);
       setComment("");
       setVoterName("");
       setPendingVoteId(null);
@@ -173,11 +183,19 @@ function VotingPanel({
   return (
     <div className="mt-3">
       <div className="flex gap-2">
-        <Button aria-label="Thumbs up" isLoading={isVoting} onClick={() => castVote("up")}>
-          <ThumbsUp /> {variation.up}
+        <Button
+          aria-label={`Thumbs up, ${variation.up} votes`}
+          isLoading={pendingDirection === "up"}
+          onClick={() => castVote("up")}
+        >
+          <ThumbsUp /> <span className="tabular-nums">{variation.up}</span>
         </Button>
-        <Button aria-label="Thumbs down" isLoading={isVoting} onClick={() => castVote("down")}>
-          <ThumbsDown /> {variation.down}
+        <Button
+          aria-label={`Thumbs down, ${variation.down} votes`}
+          isLoading={pendingDirection === "down"}
+          onClick={() => castVote("down")}
+        >
+          <ThumbsDown /> <span className="tabular-nums">{variation.down}</span>
         </Button>
       </div>
       {voteError && <p className="mt-2 text-sm text-error-primary">{voteError}</p>}

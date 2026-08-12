@@ -62,6 +62,8 @@ describe("VariationList", () => {
         sortMode={"all" as SortMode}
         onSelect={onSelect}
         onSortModeChange={() => {}}
+        isOpen={false}
+        onClose={() => {}}
       />
     );
     await user.click(screen.getByText("Option A"));
@@ -79,6 +81,8 @@ describe("VariationList", () => {
         sortMode={"all" as SortMode}
         onSelect={() => {}}
         onSortModeChange={onSortModeChange}
+        isOpen={false}
+        onClose={() => {}}
       />
     );
     await user.click(screen.getByText("Top"));
@@ -96,6 +100,8 @@ describe("VariationList", () => {
         sortMode={"all" as SortMode}
         onSelect={() => {}}
         onSortModeChange={onSortModeChange}
+        isOpen={false}
+        onClose={() => {}}
       />
     );
     await user.click(screen.getByText("All"));
