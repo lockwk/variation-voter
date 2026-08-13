@@ -23,26 +23,21 @@ const base: VariationWithAggregates = {
   up: 2,
   down: 1,
   score: 1,
-  comments: [{ id: "c1", comment: "too busy", voterName: "Kevin", createdAt: new Date() }],
+  viewerVote: null,
+  comments: [],
 };
 
-// Task 16 wires these up; this task's Stage accepts but doesn't yet use them.
-const stubStageProps = {
-  voterId: "voter1",
-  voterStatus: "active" as const,
-  onVoteCast: () => {},
-  onVoteCastFailed: () => {},
-  onCommentSubmit: () => {},
-};
-
+// B3/B4/I1: the stage is now a pure media pane — title/description, vote
+// buttons, and comments all moved into the rail (see rail.tsx and
+// comments-panel.tsx), so Stage only ever takes `variation`.
 describe("Stage", () => {
   it("shows an empty state when nothing is selected", () => {
-    render(<Stage variation={null} {...stubStageProps} />);
+    render(<Stage variation={null} />);
     expect(screen.getByText(/no variation selected/i)).toBeInTheDocument();
   });
 
   it("renders a sandboxed iframe for kind 'url'", () => {
-    render(<Stage variation={base} {...stubStageProps} />);
+    render(<Stage variation={base} />);
     const iframe = screen.getByTitle("Option A");
     expect(iframe.tagName).toBe("IFRAME");
     expect(iframe).toHaveAttribute("src", "https://preview.example/a");
@@ -50,41 +45,11 @@ describe("Stage", () => {
   });
 
   it("renders an img for kind 'image'", () => {
-    render(
-      <Stage
-        variation={{ ...base, kind: "image", src: "https://example.com/b.png" }}
-        {...stubStageProps}
-      />
-    );
+    render(<Stage variation={{ ...base, kind: "image", src: "https://example.com/b.png" }} />);
     expect(screen.getByRole("img", { name: "Option A" })).toHaveAttribute(
       "src",
       "https://example.com/b.png"
     );
-  });
-
-  it("renders comments with the commenter's name", () => {
-    render(<Stage variation={base} {...stubStageProps} />);
-    expect(screen.getByText("too busy")).toBeInTheDocument();
-    expect(screen.getByText("Kevin")).toBeInTheDocument();
-  });
-
-  it("renders an avatar with initials next to a named commenter", () => {
-    render(<Stage variation={base} {...stubStageProps} />);
-    expect(screen.getByText("K")).toBeInTheDocument();
-  });
-
-  it("renders a fallback avatar for an anonymous commenter", () => {
-    render(
-      <Stage
-        variation={{
-          ...base,
-          comments: [{ id: "c2", comment: "no name given", voterName: null, createdAt: new Date() }],
-        }}
-        {...stubStageProps}
-      />
-    );
-    expect(screen.getByText("Anonymous")).toBeInTheDocument();
-    expect(screen.getByText("?")).toBeInTheDocument();
   });
 
   it("renders an iframe embed for kind 'embed' instead of stripping it", () => {
@@ -95,7 +60,6 @@ describe("Stage", () => {
           kind: "embed",
           src: '<iframe src="https://www.youtube.com/embed/xyz" allowfullscreen></iframe>',
         }}
-        {...stubStageProps}
       />
     );
     const iframe = container.querySelector("iframe");
@@ -105,17 +69,17 @@ describe("Stage", () => {
 
   it("still strips dangerous attributes like onerror from embed content", () => {
     const { container } = render(
-      <Stage
-        variation={{
-          ...base,
-          kind: "embed",
-          src: '<img src="x" onerror="alert(1)">',
-        }}
-        {...stubStageProps}
-      />
+      <Stage variation={{ ...base, kind: "embed", src: '<img src="x" onerror="alert(1)">' }} />
     );
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img).not.toHaveAttribute("onerror");
+  });
+
+  it("renders no title, description, vote buttons, or comments — those moved to the rail", () => {
+    render(<Stage variation={base} />);
+    expect(screen.queryByRole("heading", { name: "Option A" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/current live version/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /thumbs/i })).not.toBeInTheDocument();
   });
 });

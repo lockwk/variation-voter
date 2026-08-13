@@ -45,14 +45,14 @@ async function main() {
     src: "https://example.com",
   });
 
-  const upvote = await castVote(db, embed.id, { direction: "up" });
-  await attachCommentToVote(db, upvote.id, embed.id, {
+  await castVote(db, embed.id, { direction: "up", viewerId: "seed-viewer-1" });
+  await attachCommentToVote(db, embed.id, "seed-viewer-1", {
     comment: "Love the darker nav, much easier on the eyes.",
     voterName: "Kevin",
   });
 
-  const downvote = await castVote(db, image.id, { direction: "down" });
-  await attachCommentToVote(db, downvote.id, image.id, {
+  await castVote(db, image.id, { direction: "down", viewerId: "seed-viewer-2" });
+  await attachCommentToVote(db, image.id, "seed-viewer-2", {
     comment: "Not a fan of this one.",
   });
 

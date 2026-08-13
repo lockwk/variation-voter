@@ -1,0 +1,4 @@
+# Gitignored files copied into every new Conductor workspace.
+# .gitignore pattern syntax. Docs: https://conductor.build/docs/reference/worktreeinclude
+.env*
+!.env.example
