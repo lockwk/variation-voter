@@ -61,6 +61,16 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
     expect(response.status).toBe(400);
   });
 
+  it("rejects a name-only body with 400, not 500", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const response = await postComment(commentRequest("comments", { voterName: "Kevin" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+    expect(response.status).toBe(400);
+  });
+
   it("404s when the variation doesn't belong to the voter", async () => {
     const voterA = await createVoter(db, { title: "A" });
     const voterB = await createVoter(db, { title: "B" });

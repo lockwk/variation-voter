@@ -53,9 +53,24 @@ describe("commentSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts a voterName on its own", () => {
-    const result = commentSchema.safeParse({ voterName: "Kevin" });
+  it("accepts a comment with a voterName", () => {
+    const result = commentSchema.safeParse({ comment: "too busy", voterName: "Kevin" });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects a voterName without a comment", () => {
+    const result = commentSchema.safeParse({ voterName: "Kevin" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty comment", () => {
+    const result = commentSchema.safeParse({ comment: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a whitespace-only comment", () => {
+    const result = commentSchema.safeParse({ comment: "   " });
+    expect(result.success).toBe(false);
   });
 
   it("rejects a body with neither comment nor voterName", () => {
