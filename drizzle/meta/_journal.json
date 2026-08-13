@@ -15,6 +15,13 @@
       "when": 1786625443976,
       "tag": "0001_empty_spencer_smythe",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786641050892,
+      "tag": "0002_soft_cargill",
+      "breakpoints": true
     }
   ]
 }

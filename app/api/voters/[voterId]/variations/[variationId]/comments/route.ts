@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db/client";
-import { castVoteSchema } from "@/lib/validation";
-import { toggleVote } from "@/db/queries";
+import { commentSchema } from "@/lib/validation";
+import { upsertComment } from "@/db/queries";
 import { findActiveVariationError, resolveViewerId } from "../_shared";
 
 export async function POST(
@@ -14,18 +14,12 @@ export async function POST(
   if (activeError) return activeError;
 
   const body = await request.json().catch(() => null);
-  const parsed = castVoteSchema.safeParse(body);
+  const parsed = commentSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const viewerId = resolveViewerId(request);
-  const result = await toggleVote(db, variationId, viewerId, parsed.data.direction);
-  // "added" is a genuinely new resource (201); "switched" updates the existing
-  // vote row and "removed" undoes it entirely, so both are 200 with vote: null
-  // on removal — callers (see stage.tsx) must guard on a possibly-null vote.
-  return NextResponse.json(
-    { vote: result.vote, state: result.state },
-    { status: result.state === "added" ? 201 : 200 }
-  );
+  const comment = await upsertComment(db, variationId, viewerId, parsed.data);
+  return NextResponse.json({ comment });
 }

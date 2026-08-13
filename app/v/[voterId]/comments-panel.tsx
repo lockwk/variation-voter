@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUp, Lock01, ThumbsDown, ThumbsUp } from "@untitledui/icons";
+import { ArrowUp, ThumbsDown, ThumbsUp } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 import { relativeTimeFrom } from "@/lib/relative-time";
 import { useScrollFade } from "./use-scroll-fade";
@@ -39,9 +39,10 @@ export function CommentsPanel({
     setError(null);
   }
 
-  // Comments (G3) and voting (route.ts's findActiveVariationError) are both
-  // gated behind an active, voted-on variation.
-  const locked = voterStatus === "archived" || !variation || variation.viewerVote === null;
+  // Commenting no longer requires having voted — it's only locked when the
+  // voter is archived (see route.ts's findActiveVariationError) or there's no
+  // selected variation to comment on.
+  const locked = voterStatus === "archived" || !variation;
   // The send button's enabled look (design node 28Z-0) tracks whether there's
   // actually something to submit, not just whether the composer is unlocked.
   const canSubmit = !locked && !isSubmitting && comment.trim().length > 0;
@@ -49,15 +50,14 @@ export function CommentsPanel({
   async function submit() {
     if (!variation || locked || isSubmitting) return;
     const trimmed = comment.trim();
-    // Empty comment does nothing — there's no vote-attach step left to skip
-    // past (that already happened when the vote was cast), unlike the old flow.
+    // Empty comment does nothing to submit.
     if (!trimmed) return;
 
     setIsSubmitting(true);
     setError(null);
     try {
-      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
-        method: "PATCH",
+      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/comments`, {
+        method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ comment: trimmed, voterName: name.trim() || undefined }),
       });
@@ -78,12 +78,6 @@ export function CommentsPanel({
     <div className="flex flex-1 min-h-0 flex-col gap-3">
       <div className="shrink-0 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-[#E8E8E8]">Comments</h2>
-        {variation && variation.viewerVote === null && (
-          <div className="flex items-center gap-1 text-[#A1A1AA]">
-            <Lock01 aria-hidden="true" className="size-4" />
-            <span className="text-xs font-medium">Vote to unlock commenting</span>
-          </div>
-        )}
       </div>
 
       <div
@@ -159,13 +153,15 @@ function commentDisplayName(comment: VariationComment): string {
 }
 
 function CommentItem({ comment }: { comment: VariationComment }) {
-  const DirectionIcon = comment.direction === "up" ? ThumbsUp : ThumbsDown;
+  // A comment with no associated vote (the commenter never voted) renders
+  // neutrally — no thumb icon, just the name and text.
+  const DirectionIcon = comment.direction === "up" ? ThumbsUp : comment.direction === "down" ? ThumbsDown : null;
   const directionColor = comment.direction === "up" ? "#86EFAC" : "#FCA5A5";
 
   return (
     <li className="flex flex-col gap-3 py-2 pl-3 pr-2">
       <div className="flex items-center gap-2">
-        <DirectionIcon aria-hidden="true" className="size-4 shrink-0" color={directionColor} />
+        {DirectionIcon && <DirectionIcon aria-hidden="true" className="size-4 shrink-0" color={directionColor} />}
         <span className="truncate text-sm font-medium text-primary">{commentDisplayName(comment)}</span>
         <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
       </div>

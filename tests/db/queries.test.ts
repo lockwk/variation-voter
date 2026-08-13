@@ -9,7 +9,7 @@ import {
   getVoterDetail,
   castVote,
   toggleVote,
-  attachCommentToVote,
+  upsertComment,
   purgeExpiredAndArchivedVoters,
 } from "@/db/queries";
 
@@ -82,7 +82,8 @@ describe("getVoterDetail", () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     await castVote(db, variation.id, { direction: "up" });
-    await castVote(db, variation.id, { direction: "up", comment: "great", voterName: "Kevin" });
+    await castVote(db, variation.id, { direction: "up", viewerId: "commenter-1" });
+    await upsertComment(db, variation.id, "commenter-1", { comment: "great", voterName: "Kevin" });
     await castVote(db, variation.id, { direction: "down" });
 
     const detail = await getVoterDetail(db, voter.id);
@@ -101,7 +102,7 @@ describe("getVoterDetail", () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
-    await attachCommentToVote(db, variation.id, "viewer-1", { comment: "mine" });
+    await upsertComment(db, variation.id, "viewer-1", { comment: "mine" });
     await toggleVote(db, variation.id, "viewer-2", "down");
 
     const asViewer1 = await getVoterDetail(db, voter.id, "viewer-1");
@@ -133,7 +134,6 @@ describe("castVote", () => {
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const vote = await castVote(db, variation.id, { direction: "up" });
     expect(vote.direction).toBe("up");
-    expect(vote.comment).toBeNull();
   });
 });
 
@@ -188,32 +188,64 @@ describe("toggleVote", () => {
   });
 });
 
-describe("attachCommentToVote", () => {
-  it("updates the existing vote row rather than creating a new one", async () => {
+describe("upsertComment", () => {
+  it("creates a comment even when the viewer has no vote on the variation", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const vote = await castVote(db, variation.id, { direction: "up", viewerId: "viewer-1" });
 
-    const updated = await attachCommentToVote(db, variation.id, "viewer-1", {
+    const comment = await upsertComment(db, variation.id, "viewer-1", {
       comment: "too busy",
       voterName: "Kevin",
     });
 
-    expect(updated?.id).toBe(vote.id);
-    expect(updated?.comment).toBe("too busy");
+    expect(comment.comment).toBe("too busy");
+    expect(comment.voterName).toBe("Kevin");
+
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].up).toBe(0);
+    expect(detail?.variations[0].comments).toHaveLength(1);
+    expect(detail?.variations[0].comments[0].direction).toBeNull();
+  });
+
+  it("upserts rather than duplicating when the same viewer comments again on the same variation", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const first = await upsertComment(db, variation.id, "viewer-1", { comment: "first take" });
+    const second = await upsertComment(db, variation.id, "viewer-1", { comment: "revised take" });
+
+    expect(second.id).toBe(first.id);
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].comments).toHaveLength(1);
+    expect(detail?.variations[0].comments[0].comment).toBe("revised take");
+  });
+
+  it("reflects the commenter's vote direction when they've also voted", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    await castVote(db, variation.id, { direction: "up", viewerId: "viewer-1" });
+
+    await upsertComment(db, variation.id, "viewer-1", { comment: "too busy" });
 
     const detail = await getVoterDetail(db, voter.id);
     expect(detail?.variations[0].up).toBe(1); // still one vote, not two
     expect(detail?.variations[0].comments).toHaveLength(1);
+    expect(detail?.variations[0].comments[0].direction).toBe("up");
   });
 
-  it("returns null when the viewer has no vote on the given variation", async () => {
+  it("leaves the comment intact, now with a null direction, after the vote it was tied to is undone", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variationA = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const variationB = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
-    await castVote(db, variationA.id, { direction: "up", viewerId: "viewer-1" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    await toggleVote(db, variation.id, "viewer-1", "up");
+    await upsertComment(db, variation.id, "viewer-1", { comment: "mine" });
 
-    expect(await attachCommentToVote(db, variationB.id, "viewer-1", { comment: "x" })).toBeNull();
+    const result = await toggleVote(db, variation.id, "viewer-1", "up");
+    expect(result.state).toBe("removed");
+
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].comments).toHaveLength(1);
+    expect(detail?.variations[0].comments[0].comment).toBe("mine");
+    expect(detail?.variations[0].comments[0].direction).toBeNull();
   });
 });
 

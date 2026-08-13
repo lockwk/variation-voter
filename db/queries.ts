@@ -1,13 +1,13 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
-import { voters, variations, votes } from "./schema";
+import { voters, variations, votes, comments } from "./schema";
 import type { Vote } from "./schema";
 import { newId } from "@/lib/ids";
 
 // Postgres' `= NULL` never matches (even other NULLs), so a "does this row
 // belong to this viewer" condition needs isNull() when the viewer is unknown
-// rather than eq(col, null) — used by toggleVote, attachCommentToVote, and
+// rather than eq(col, null) — used by toggleVote, upsertComment, and
 // getVoterDetail's viewer-vote lookup.
 function viewerCondition(viewerId: string | null) {
   return viewerId === null ? isNull(votes.viewerId) : eq(votes.viewerId, viewerId);
@@ -73,8 +73,9 @@ export type VariationComment = {
   comment: string;
   voterName: string | null;
   createdAt: Date;
-  direction: VoteDirection;
-  /** True when this comment's vote belongs to the current viewer. */
+  /** The commenter's own vote direction on this variation, or null if they never voted. */
+  direction: VoteDirection | null;
+  /** True when this comment belongs to the current viewer. */
   isOwn: boolean;
 };
 
@@ -131,20 +132,28 @@ export async function getVoterDetail(
     .groupBy(variations.id)
     .orderBy(variations.position);
 
+  // Comments live in their own table now (anyone can comment whether or not
+  // they've voted), so a commenter's vote direction is a LEFT JOIN back onto
+  // votes rather than something read off the same row. The join matches on
+  // both variationId and viewerId; a NULL viewerId never equals another NULL
+  // in Postgres, so an unknown-viewer comment correctly never joins to an
+  // unknown-viewer vote — it just gets direction: null, same as a real viewer
+  // who commented without voting.
   const commentRows = await db
     .select({
-      id: votes.id,
-      variationId: votes.variationId,
-      comment: votes.comment,
-      voterName: votes.voterName,
-      createdAt: votes.createdAt,
+      id: comments.id,
+      variationId: comments.variationId,
+      comment: comments.comment,
+      voterName: comments.voterName,
+      createdAt: comments.createdAt,
       direction: votes.direction,
-      viewerId: votes.viewerId,
+      viewerId: comments.viewerId,
     })
-    .from(votes)
-    .innerJoin(variations, eq(variations.id, votes.variationId))
-    .where(and(eq(variations.voterId, voterId), isNotNull(votes.comment)))
-    .orderBy(sql`${votes.createdAt} desc`);
+    .from(comments)
+    .innerJoin(variations, eq(variations.id, comments.variationId))
+    .leftJoin(votes, and(eq(votes.variationId, comments.variationId), eq(votes.viewerId, comments.viewerId)))
+    .where(eq(variations.voterId, voterId))
+    .orderBy(sql`${comments.createdAt} desc`);
 
   // The viewer's own current vote per variation, so the client can hydrate
   // (e.g. highlight the pressed thumb) without an extra round trip.
@@ -162,10 +171,10 @@ export async function getVoterDetail(
     score: row.up - row.down,
     viewerVote: viewerVoteRows.find((v) => v.variationId === row.id)?.direction ?? null,
     comments: commentRows
-      .filter((c) => c.variationId === row.id && c.comment)
+      .filter((c) => c.variationId === row.id)
       .map((c) => ({
         id: c.id,
-        comment: c.comment as string,
+        comment: c.comment,
         voterName: c.voterName,
         createdAt: c.createdAt,
         direction: c.direction,
@@ -185,7 +194,7 @@ export async function getVoterDetail(
 export async function castVote(
   db: Database,
   variationId: string,
-  input: { direction: "up" | "down"; comment?: string; voterName?: string; viewerId?: string }
+  input: { direction: "up" | "down"; viewerId?: string }
 ) {
   const id = newId();
   const [vote] = await db.insert(votes).values({ id, variationId, ...input }).returning();
@@ -235,23 +244,34 @@ export async function toggleVote(
 }
 
 /**
- * Attaches a comment/voterName to the viewer's current vote on a variation
- * (comments are gated behind having voted, and always ride along on the vote
- * row rather than a separate table). Returns null when the viewer has no
- * current vote to attach to.
+ * Creates or updates a viewer's comment on a variation. Comments now live in
+ * their own table, independent of whether the viewer has voted, so this
+ * always succeeds — a resubmission by the same (variationId, viewerId) pair
+ * upserts in place (via the comments_variation_viewer_unique index) rather
+ * than creating a duplicate comment.
  */
-export async function attachCommentToVote(
+export async function upsertComment(
   db: Database,
   variationId: string,
   viewerId: string,
   input: { comment?: string; voterName?: string }
 ) {
-  const [vote] = await db
-    .update(votes)
-    .set(input)
-    .where(and(eq(votes.variationId, variationId), eq(votes.viewerId, viewerId)))
+  const id = newId();
+  // The comments table requires `comment` (unlike the old votes.comment,
+  // which was nullable); commentSchema still only requires *one* of
+  // comment/voterName, matching the previous "attach a name to an existing
+  // comment thread" allowance, so a comment-less first submission would fail
+  // the NOT NULL constraint at insert time — this is an accepted, unexercised
+  // edge left as-is by the schema this was modeled on.
+  const [comment] = await db
+    .insert(comments)
+    .values({ id, variationId, viewerId, comment: input.comment as string, voterName: input.voterName })
+    .onConflictDoUpdate({
+      target: [comments.variationId, comments.viewerId],
+      set: input,
+    })
     .returning();
-  return vote ?? null;
+  return comment;
 }
 
 export async function purgeExpiredAndArchivedVoters(db: Database, now: Date, archiveGraceMs: number) {

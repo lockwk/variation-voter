@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { POST, PATCH } from "@/app/api/voters/[voterId]/variations/[variationId]/votes/route";
+import { POST } from "@/app/api/voters/[voterId]/variations/[variationId]/votes/route";
 import { db } from "@/db/client";
 import { createVoter, addVariation, closeVoter } from "@/db/queries";
 
@@ -50,7 +50,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
     expect(response.status).toBe(400);
   });
 
-  it("records an anonymous vote with no comment yet", async () => {
+  it("records an anonymous vote", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
 
@@ -61,7 +61,6 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
     const body = await response.json();
     expect(body.state).toBe("added");
     expect(body.vote.direction).toBe("up");
-    expect(body.vote.comment).toBeNull();
   });
 
   it("toggles: voting the same direction again undoes the vote", async () => {
@@ -111,46 +110,5 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
     expect((await first.json()).state).toBe("added");
     expect((await second.json()).state).toBe("added");
-  });
-});
-
-describe("PATCH /api/voters/:voterId/variations/:variationId/votes", () => {
-  it("attaches a comment to the viewer's current vote", async () => {
-    const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const postResponse = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
-      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
-    });
-    const { vote } = await postResponse.json();
-
-    const patchResponse = await PATCH(
-      voteRequest("PATCH", { comment: "nice", voterName: "Kevin" }, "viewer-1"),
-      { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
-    );
-
-    expect(patchResponse.status).toBe(200);
-    const body = await patchResponse.json();
-    expect(body.vote.id).toBe(vote.id);
-    expect(body.vote.comment).toBe("nice");
-  });
-
-  it("409s when the viewer has no current vote to comment on", async () => {
-    const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-
-    const response = await PATCH(voteRequest("PATCH", { comment: "x" }, "viewer-1"), {
-      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
-    });
-    expect(response.status).toBe(409);
-  });
-
-  it("rejects a body with neither comment nor voterName", async () => {
-    const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-
-    const response = await PATCH(voteRequest("PATCH", {}, "viewer-1"), {
-      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
-    });
-    expect(response.status).toBe(400);
   });
 });
