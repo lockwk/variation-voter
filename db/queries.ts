@@ -254,18 +254,12 @@ export async function upsertComment(
   db: Database,
   variationId: string,
   viewerId: string,
-  input: { comment?: string; voterName?: string }
+  input: { comment: string; voterName?: string }
 ) {
   const id = newId();
-  // The comments table requires `comment` (unlike the old votes.comment,
-  // which was nullable); commentSchema still only requires *one* of
-  // comment/voterName, matching the previous "attach a name to an existing
-  // comment thread" allowance, so a comment-less first submission would fail
-  // the NOT NULL constraint at insert time — this is an accepted, unexercised
-  // edge left as-is by the schema this was modeled on.
   const [comment] = await db
     .insert(comments)
-    .values({ id, variationId, viewerId, comment: input.comment as string, voterName: input.voterName })
+    .values({ id, variationId, viewerId, comment: input.comment, voterName: input.voterName })
     .onConflictDoUpdate({
       target: [comments.variationId, comments.viewerId],
       set: input,

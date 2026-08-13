@@ -17,11 +17,7 @@ export const castVoteSchema = z.object({
   direction: z.enum(["up", "down"]),
 });
 
-export const commentSchema = z
-  .object({
-    comment: z.string().trim().max(1000).optional(),
-    voterName: z.string().trim().max(100).optional(),
-  })
-  .refine((data) => data.comment !== undefined || data.voterName !== undefined, {
-    message: "Provide a comment or voterName",
-  });
+export const commentSchema = z.object({
+  comment: z.string().trim().min(1).max(1000),
+  voterName: z.string().trim().max(100).optional(),
+});
