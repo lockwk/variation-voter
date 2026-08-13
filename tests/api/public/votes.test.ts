@@ -3,10 +3,16 @@ import { POST, PATCH } from "@/app/api/voters/[voterId]/variations/[variationId]
 import { db } from "@/db/client";
 import { createVoter, addVariation, closeVoter } from "@/db/queries";
 
-function voteRequest(method: string, body: unknown) {
+// Simulates a single browser's persisted vv_viewer cookie riding along on
+// every request it makes, the same way middleware.ts + the browser's cookie
+// jar do outside of tests.
+function voteRequest(method: string, body: unknown, viewerId?: string) {
   return new Request("http://localhost/votes", {
     method,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(viewerId ? { cookie: `vv_viewer=${viewerId}` } : {}),
+    },
     body: JSON.stringify(body),
   });
 }
@@ -48,27 +54,77 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
 
-    const response = await POST(voteRequest("POST", { direction: "up" }), {
+    const response = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
     expect(response.status).toBe(201);
     const body = await response.json();
+    expect(body.state).toBe("added");
     expect(body.vote.direction).toBe("up");
     expect(body.vote.comment).toBeNull();
+  });
+
+  it("toggles: voting the same direction again undoes the vote", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+    const response = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.state).toBe("removed");
+    expect(body.vote).toBeNull();
+  });
+
+  it("switches: voting the opposite direction flips the existing vote", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+    const response = await POST(voteRequest("POST", { direction: "down" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.state).toBe("switched");
+    expect(body.vote.direction).toBe("down");
+  });
+
+  it("lets two different viewers each cast their own vote", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const first = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+    const second = await POST(voteRequest("POST", { direction: "up" }, "viewer-2"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+    });
+
+    expect((await first.json()).state).toBe("added");
+    expect((await second.json()).state).toBe("added");
   });
 });
 
 describe("PATCH /api/voters/:voterId/variations/:variationId/votes", () => {
-  it("attaches a comment to the vote created by an earlier POST", async () => {
+  it("attaches a comment to the viewer's current vote", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const postResponse = await POST(voteRequest("POST", { direction: "up" }), {
+    const postResponse = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
     const { vote } = await postResponse.json();
 
     const patchResponse = await PATCH(
-      voteRequest("PATCH", { voteId: vote.id, comment: "nice", voterName: "Kevin" }),
+      voteRequest("PATCH", { comment: "nice", voterName: "Kevin" }, "viewer-1"),
       { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
     );
 
@@ -78,21 +134,21 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/votes", () => {
     expect(body.vote.comment).toBe("nice");
   });
 
-  it("404s for an unknown voteId", async () => {
+  it("409s when the viewer has no current vote to comment on", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
 
-    const response = await PATCH(voteRequest("PATCH", { voteId: "nope", comment: "x" }), {
+    const response = await PATCH(voteRequest("PATCH", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(409);
   });
 
-  it("rejects a body missing voteId", async () => {
+  it("rejects a body with neither comment nor voterName", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
 
-    const response = await PATCH(voteRequest("PATCH", { comment: "x" }), {
+    const response = await PATCH(voteRequest("PATCH", {}, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
     expect(response.status).toBe(400);

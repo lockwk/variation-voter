@@ -1,34 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
-import { ThumbsUp, ThumbsDown } from "@untitledui/icons";
-import { Button } from "@/components/base/buttons/button";
-import { Input } from "@/components/base/input/input";
-import { TextArea } from "@/components/base/textarea/textarea";
 import { EmptyState } from "@/components/application/empty-state/empty-state";
-import { Avatar } from "@/components/base/avatar/avatar";
-import { initialsFor } from "@/lib/initials";
 import type { VariationWithAggregates } from "@/db/queries";
 
-export function Stage({
-  variation,
-  voterId,
-  voterStatus,
-  onVoteCast,
-  onVoteCastFailed,
-  onCommentSubmit,
-}: {
-  variation: VariationWithAggregates | null;
-  voterId: string;
-  voterStatus: "active" | "archived";
-  onVoteCast: (variationId: string, direction: "up" | "down") => void;
-  onVoteCastFailed: (variationId: string, direction: "up" | "down") => void;
-  onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
-}) {
+// B3/B4/I1: the stage is now a pure media pane — no title/description, no
+// vote buttons, no comments (all of that moved into the rail, see rail.tsx).
+export function Stage({ variation }: { variation: VariationWithAggregates | null }) {
   if (!variation) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center bg-secondary">
         <EmptyState>
           <EmptyState.Header>
             <EmptyState.FeaturedIcon color="gray" />
@@ -43,182 +24,8 @@ export function Stage({
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto">
-      <div className="p-6 border-b border-secondary">
-        <h2 className="text-xl font-semibold">{variation.title}</h2>
-        {variation.description && <p className="text-tertiary mt-1">{variation.description}</p>}
-        {voterStatus === "archived" ? (
-          <p className="mt-3 text-sm text-quaternary">
-            This voter is closed and read-only — voting is disabled.
-          </p>
-        ) : (
-          <VotingPanel
-            key={variation.id}
-            voterId={voterId}
-            variation={variation}
-            onVoteCast={onVoteCast}
-            onVoteCastFailed={onVoteCastFailed}
-            onCommentSubmit={onCommentSubmit}
-          />
-        )}
-      </div>
-      <div className="flex-1 min-h-[400px] bg-secondary">
-        <VariationMedia variation={variation} />
-      </div>
-      <div className="p-6 border-t border-secondary">
-        <h3 className="font-medium mb-3">Comments</h3>
-        {variation.comments.length === 0 ? (
-          <p className="text-quaternary text-sm">No comments yet.</p>
-        ) : (
-          <ul className="space-y-3">
-            {variation.comments.map((comment) => (
-              <li key={comment.id} className="flex gap-2 text-sm">
-                <Avatar initials={initialsFor(comment.voterName)} size="xs" />
-                <div>
-                  <span className="font-medium">{comment.voterName ?? "Anonymous"}</span>
-                  <p className="text-secondary">{comment.comment}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function VotingPanel({
-  voterId,
-  variation,
-  onVoteCast,
-  onVoteCastFailed,
-  onCommentSubmit,
-}: {
-  voterId: string;
-  variation: VariationWithAggregates;
-  onVoteCast: (variationId: string, direction: "up" | "down") => void;
-  onVoteCastFailed: (variationId: string, direction: "up" | "down") => void;
-  onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
-}) {
-  const [pendingVoteId, setPendingVoteId] = useState<string | null>(null);
-  const [comment, setComment] = useState("");
-  const [voterName, setVoterName] = useState("");
-  // Guards against rapid double-clicks firing two independent in-flight requests
-  // for the same action (two POSTs double-counting a vote, or two PATCHes racing
-  // on the same vote's comment). Tracks *which* direction is in flight so only
-  // that button shows a loading state.
-  const [pendingDirection, setPendingDirection] = useState<"up" | "down" | null>(null);
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-  const [voteError, setVoteError] = useState<string | null>(null);
-  const [commentError, setCommentError] = useState<string | null>(null);
-
-  async function castVote(direction: "up" | "down") {
-    if (pendingDirection) return;
-    setPendingDirection(direction);
-    setVoteError(null);
-    onVoteCast(variation.id, direction);
-    try {
-      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ direction }),
-      });
-      if (!response.ok) {
-        // Roll back the optimistic bump above — a failed vote must never leave a
-        // permanently-wrong local count.
-        onVoteCastFailed(variation.id, direction);
-        setVoteError("Couldn't record your vote. Please try again.");
-        return;
-      }
-      const { vote } = await response.json();
-      setPendingVoteId(vote.id);
-    } catch {
-      onVoteCastFailed(variation.id, direction);
-      setVoteError("Couldn't record your vote. Please try again.");
-    } finally {
-      setPendingDirection(null);
-    }
-  }
-
-  async function submitComment() {
-    if (!pendingVoteId || isSubmittingComment) return;
-    const trimmedComment = comment.trim();
-    // The comment is optional — with nothing typed, Submit just dismisses the
-    // form instead of silently doing nothing (the vote itself already landed).
-    if (!trimmedComment) {
-      setComment("");
-      setVoterName("");
-      setPendingVoteId(null);
-      return;
-    }
-    setIsSubmittingComment(true);
-    setCommentError(null);
-    try {
-      // PATCH the same vote the click already created — never a second POST,
-      // which would double-count the vote (see Task 12).
-      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/votes`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          voteId: pendingVoteId,
-          comment: trimmedComment,
-          voterName: voterName.trim() || undefined,
-        }),
-      });
-      if (!response.ok) {
-        setCommentError("Couldn't save your comment. Please try again.");
-        return;
-      }
-      onCommentSubmit(variation.id, trimmedComment, voterName.trim() || null);
-      setComment("");
-      setVoterName("");
-      setPendingVoteId(null);
-    } catch {
-      setCommentError("Couldn't save your comment. Please try again.");
-    } finally {
-      setIsSubmittingComment(false);
-    }
-  }
-
-  return (
-    <div className="mt-3">
-      <div className="flex gap-2">
-        <Button
-          aria-label={`Thumbs up, ${variation.up} votes`}
-          isLoading={pendingDirection === "up"}
-          onClick={() => castVote("up")}
-        >
-          <ThumbsUp /> <span className="tabular-nums">{variation.up}</span>
-        </Button>
-        <Button
-          aria-label={`Thumbs down, ${variation.down} votes`}
-          isLoading={pendingDirection === "down"}
-          onClick={() => castVote("down")}
-        >
-          <ThumbsDown /> <span className="tabular-nums">{variation.down}</span>
-        </Button>
-      </div>
-      {voteError && <p className="mt-2 text-sm text-error-primary">{voteError}</p>}
-      {pendingVoteId && (
-        <div className="mt-3 flex flex-col gap-2 max-w-sm">
-          <TextArea
-            aria-label="Why? (optional)"
-            placeholder="Why? (optional)"
-            value={comment}
-            onChange={(value) => setComment(value)}
-          />
-          <Input
-            aria-label="Name (optional)"
-            placeholder="Name (optional)"
-            value={voterName}
-            onChange={(value) => setVoterName(value)}
-          />
-          <Button isLoading={isSubmittingComment} onClick={submitComment}>
-            Submit
-          </Button>
-          {commentError && <p className="text-sm text-error-primary">{commentError}</p>}
-        </div>
-      )}
+    <div className="flex-1 min-w-0 flex items-center justify-center overflow-auto bg-secondary p-6">
+      <VariationMedia variation={variation} />
     </div>
   );
 }

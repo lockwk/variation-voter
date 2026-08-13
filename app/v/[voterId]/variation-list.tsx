@@ -1,10 +1,10 @@
 "use client";
 
-import { ThumbsDown, ThumbsUp, X } from "@untitledui/icons";
-import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
-import { BadgeWithIcon } from "@/components/base/badges/badges";
+import { ThumbsDown, ThumbsUp } from "@untitledui/icons";
+import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { cx } from "@/utils/cx";
-import type { VariationWithAggregates } from "@/db/queries";
+import { useScrollFade } from "./use-scroll-fade";
+import type { VariationWithAggregates, VoteDirection } from "@/db/queries";
 
 export type SortMode = "all" | "new" | "top";
 
@@ -18,93 +18,204 @@ export function sortVariations(
   return copy.sort((a, b) => b.score - a.score);
 }
 
-const SORT_LABELS: Record<SortMode, string> = { all: "All", new: "New", top: "Top" };
+// The "all" mode still sorts by position, but the design renames its
+// displayed tab label to "Version" (D2) — the SortMode key is unchanged.
+const SORT_LABELS: Record<SortMode, string> = { all: "Version", new: "New", top: "Top" };
+
+// Bottom scroll-fade overlay (E4) — matches the design spec's literal value,
+// shown only when the list actually overflows (see useScrollFade).
+const SCROLL_FADE_STYLE = { background: "linear-gradient(180deg, transparent, rgba(33,33,33,0.35))" };
 
 export function VariationList({
-  voterTitle,
   variations,
   selectedId,
   sortMode,
   onSelect,
   onSortModeChange,
-  isOpen,
-  onClose,
+  onVote,
+  votingId,
+  voterStatus,
 }: {
-  voterTitle: string;
   variations: VariationWithAggregates[];
   selectedId: string | null;
   sortMode: SortMode;
   onSelect: (id: string) => void;
   onSortModeChange: (mode: SortMode) => void;
-  /** Whether the nav is open as a mobile drawer (ignored at the `md` breakpoint and up, where it's always visible). */
-  isOpen: boolean;
-  onClose: () => void;
+  /** Casts/toggles a vote for the currently-selected row's inline control (E3/F3). */
+  onVote: (variationId: string, direction: VoteDirection) => void;
+  /** The variation id with an in-flight vote request, if any — disables its controls. */
+  votingId: string | null;
+  voterStatus: "active" | "archived";
 }) {
   const sorted = sortVariations(variations, sortMode);
 
+  // "V#" row prefixes (E2) are a stable identity tied to each variation's
+  // underlying position, not to its index in the currently sorted list —
+  // otherwise switching sort mode would relabel every row.
+  const positionRank = new Map(
+    [...variations].sort((a, b) => a.position - b.position).map((variation, index) => [variation.id, index + 1])
+  );
+
+  const [listRef, showFade] = useScrollFade<HTMLUListElement>([sorted.length]);
+
   return (
-    <nav
-      className={cx(
-        "w-72 shrink-0 border-r border-secondary flex flex-col bg-primary",
-        // When closed on mobile, invisible (not just translated off-screen) keeps
-        // the drawer's controls out of the tab order and the accessibility tree.
-        "fixed inset-y-0 left-0 z-40 -translate-x-full invisible transition-[transform,visibility] duration-200 ease-linear md:static md:visible md:translate-x-0",
-        isOpen && "translate-x-0 visible"
-      )}
-    >
-      <div className="p-4 border-b border-secondary">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-lg font-semibold truncate">{voterTitle}</h1>
-          <button
-            type="button"
-            aria-label="Close menu"
-            onClick={onClose}
-            className="md:hidden shrink-0 p-1 -m-1 text-tertiary hover:text-secondary"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-        <ButtonGroup
-          className="mt-3"
-          size="sm"
+    // J1: hugs its content (flex-grow 0, basis auto) up to a hard cap of 50%
+    // of the list+comments region (see rail.tsx) — never reserving empty
+    // space below a short list, but never exceeding half when long. Comments
+    // (flex-1 in rail.tsx) always absorbs whatever this doesn't use.
+    <div className="flex flex-initial min-h-0 max-h-[50%] flex-col gap-2">
+      <div className="shrink-0 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-[#E8E8E8]">Sort by</span>
+        <ToggleButtonGroup
+          aria-label="Sort by"
+          selectionMode="single"
           disallowEmptySelection
           selectedKeys={[sortMode]}
           onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
+          className="flex items-center gap-1"
         >
           {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
-            <ButtonGroupItem key={mode} id={mode} className="selected:bg-active selected:text-primary">
-              {SORT_LABELS[mode]}
-            </ButtonGroupItem>
-          ))}
-        </ButtonGroup>
-      </div>
-      <ul className="flex-1 overflow-y-auto">
-        {sorted.map((variation) => (
-          <li key={variation.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(variation.id)}
-              aria-current={variation.id === selectedId}
-              className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-primary_hover aria-[current=true]:bg-active"
+            <ToggleButton
+              key={mode}
+              id={mode}
+              className="flex h-6 items-center justify-center rounded-md px-3 text-sm font-semibold text-[#737373] outline-none transition-colors selected:bg-[#424242] selected:text-[#E8E8E8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
-              <span className="truncate">{variation.title}</span>
-              <span className="flex gap-1 shrink-0">
-                <span className="sr-only">
-                  {variation.up} upvotes, {variation.down} downvotes
-                </span>
-                <span aria-hidden="true" className="flex gap-1">
-                  <BadgeWithIcon color="success" iconLeading={ThumbsUp}>
-                    <span className="tabular-nums">{variation.up}</span>
-                  </BadgeWithIcon>
-                  <BadgeWithIcon color="error" iconLeading={ThumbsDown}>
-                    <span className="tabular-nums">{variation.down}</span>
-                  </BadgeWithIcon>
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
+              {SORT_LABELS[mode]}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </div>
+      {/* flex-auto (basis: auto, not 0) so this contributes its natural
+          content height when the list above is hugging content — a
+          flex-1/basis-0 child here would collapse to zero height instead of
+          sizing the parent to the rows. Once the parent's height is
+          determined (content height, or capped+shrunk at 50%), this still
+          shrinks to fit and the ul's overflow-y-auto scrolls as needed. */}
+      <div className="relative flex-auto min-h-0">
+        <ul ref={listRef} className="h-full overflow-y-auto flex flex-col gap-0.5 scrollbar-hide">
+          {sorted.map((variation) => {
+            const isSelected = variation.id === selectedId;
+            const disabled = voterStatus === "archived" || votingId === variation.id;
+            return (
+              <li key={variation.id}>
+                {/* The whole row is a single selection target: a full-bleed
+                    button underneath the visible content (F5/bugfix). The
+                    row's title + padding + gaps + non-selected vote counts
+                    all sit in a pointer-events-none overlay so clicks on any
+                    of them fall through to this button instead of landing in
+                    dead space. Only the SELECTED row's real vote buttons
+                    re-enable pointer events, so they stay independently
+                    clickable without ever nesting a <button> inside this
+                    one. */}
+                <div className="relative rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(variation.id)}
+                    aria-current={isSelected}
+                    aria-label={`V${positionRank.get(variation.id)} ${variation.title}`}
+                    className={cx(
+                      "absolute inset-0 h-full w-full rounded-lg outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
+                      isSelected ? "bg-[#424242]" : "bg-[#2B2B2B] hover:bg-[#424242]"
+                    )}
+                  />
+                  <div className="relative flex items-center justify-between gap-2 pl-3 pr-2 py-2 pointer-events-none">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                      <span className="text-[#A1A1AA]">V{positionRank.get(variation.id)}</span>{" "}
+                      <span className="text-[#E8E8E8]">{variation.title}</span>
+                    </span>
+                    <div className={cx("flex shrink-0 items-center", isSelected && "pointer-events-auto")}>
+                      <span className="sr-only">
+                        {variation.up} upvotes, {variation.down} downvotes
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <VoteSegment
+                          direction="up"
+                          variation={variation}
+                          isSelected={isSelected}
+                          disabled={disabled}
+                          onVote={onVote}
+                        />
+                        <VoteSegment
+                          direction="down"
+                          variation={variation}
+                          isSelected={isSelected}
+                          disabled={disabled}
+                          onVote={onVote}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {showFade && (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-8" style={SCROLL_FADE_STYLE} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// E3: inline two-segment vote control per row, replacing the old green/red
+// count badges. Non-selected rows are display-only (plain icon + count);
+// only the selected row's segments are interactive vote buttons, and only
+// then do they pick up the F1/F2 voted-state colors.
+function VoteSegment({
+  direction,
+  variation,
+  isSelected,
+  disabled,
+  onVote,
+}: {
+  direction: VoteDirection;
+  variation: VariationWithAggregates;
+  isSelected: boolean;
+  disabled: boolean;
+  onVote: (variationId: string, direction: VoteDirection) => void;
+}) {
+  const Icon = direction === "up" ? ThumbsUp : ThumbsDown;
+  const count = direction === "up" ? variation.up : variation.down;
+  const roundedClass = direction === "up" ? "rounded-l-[4px]" : "rounded-r-[4px]";
+  const base = cx("flex items-center gap-1 justify-center p-2", roundedClass);
+
+  if (!isSelected) {
+    return (
+      <span className={base} aria-hidden="true">
+        <Icon aria-hidden="true" className="size-4" color="#A1A1AA" />
+        <span className="w-5 text-center text-sm font-semibold tabular-nums text-[#E8E8E8]">{count}</span>
+      </span>
+    );
+  }
+
+  const isVotedThisDirection = variation.viewerVote === direction;
+  const style = isVotedThisDirection
+    ? { backgroundColor: direction === "up" ? "#86EFAC" : "#FCA5A5" }
+    : { backgroundColor: "#E8E8E8", boxShadow: "inset 0 -0.5px 0 #0000004D", borderTop: "0.5px solid #FFFFFF80" };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={isVotedThisDirection}
+      aria-label={`Thumbs ${direction}, ${count} vote${count === 1 ? "" : "s"}`}
+      onClick={(event) => {
+        // Defense in depth: this button already sits above the row's
+        // full-bleed selection button via pointer-events layering (not DOM
+        // nesting), so a click here never reaches it — but stop propagation
+        // too in case this ever gets moved back inside a shared ancestor.
+        event.stopPropagation();
+        onVote(variation.id, direction);
+      }}
+      style={style}
+      className={cx(
+        base,
+        "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default"
+      )}
+    >
+      <Icon aria-hidden="true" className="size-4" color="#212121" fill={isVotedThisDirection ? "#212121" : "none"} />
+      <span className="w-5 text-center text-sm font-semibold tabular-nums text-[#212121]">{count}</span>
+    </button>
   );
 }

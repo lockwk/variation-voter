@@ -57,16 +57,17 @@ describe("castVoteSchema", () => {
 });
 
 describe("updateVoteSchema", () => {
-  it("accepts a voteId with a comment", () => {
-    const result = updateVoteSchema.safeParse({ voteId: "abc123", comment: "too busy" });
+  it("accepts a comment on its own", () => {
+    const result = updateVoteSchema.safeParse({ comment: "too busy" });
     expect(result.success).toBe(true);
   });
 
-  it("rejects a missing voteId", () => {
-    expect(updateVoteSchema.safeParse({ comment: "too busy" }).success).toBe(false);
+  it("accepts a voterName on its own", () => {
+    const result = updateVoteSchema.safeParse({ voterName: "Kevin" });
+    expect(result.success).toBe(true);
   });
 
-  it("rejects a voteId with neither comment nor voterName", () => {
-    expect(updateVoteSchema.safeParse({ voteId: "abc123" }).success).toBe(false);
+  it("rejects a body with neither comment nor voterName", () => {
+    expect(updateVoteSchema.safeParse({}).success).toBe(false);
   });
 });
