@@ -1,0 +1,10 @@
+{
+  "name": "variation-voter",
+  "version": "0.1.0",
+  "description": "Create shareable up/down voting pages for design or build variations from any repo, against your self-hosted Variation Voter instance.",
+  "author": {
+    "name": "Variation Voter"
+  },
+  "license": "MIT",
+  "skills": ["./skills/variation-voter/"]
+}

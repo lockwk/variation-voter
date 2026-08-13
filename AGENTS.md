@@ -38,6 +38,15 @@ build it.
 See the spec's "Non-goals", "Success criteria", and "Open questions" sections
 before making scope decisions.
 
+## Distribution
+
+Variation Voter ships a config-driven Claude Code skill in
+`plugin/skills/variation-voter/` (see `SKILL.md` and `reference.md` there) so
+any agent can create a voter and return a share link once it's installed and
+pointed at a configured instance. For the full install/self-host/publish
+story — provisioning, deploying, first voter, agent setup, updating, and
+maintainer release steps — see `docs/INSTALL.md`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

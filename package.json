@@ -1,9 +1,18 @@
 {
-  "name": "variation-voter",
+  "name": "@lockwk/variation-voter",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
   "bin": {
     "create-variation-voter": "./scripts/create.mjs"
+  },
+  "files": [
+    "plugin/",
+    "cli/",
+    "scripts/create.mjs",
+    ".variation-voter.config.example"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "next dev",
@@ -14,7 +23,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "voter": "tsx cli/index.ts"
+    "voter": "tsx cli/index.ts",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
