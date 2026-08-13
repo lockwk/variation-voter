@@ -1,0 +1,20 @@
+# Variation Voter agent-skill config template.
+#
+# Copy this file to ~/.variation-voter/config and fill in your values:
+#
+#   mkdir -p ~/.variation-voter
+#   cp .variation-voter.config.example ~/.variation-voter/config
+#   chmod 600 ~/.variation-voter/config
+#
+# The variation-voter agent skill reads this file (dotenv style) when the
+# VARIATION_VOTER_URL / VARIATION_VOTER_ADMIN_TOKEN env vars are not already
+# set. Never commit the populated file — it holds your admin token.
+
+# The base URL of your deployed (or local) Variation Voter instance, no
+# trailing slash. Example: https://your-instance.vercel.app or
+# http://localhost:3000 for local dev.
+VARIATION_VOTER_URL=
+
+# The ADMIN_TOKEN you set on that instance (Vercel env var / .env.local).
+# Anyone with this token can create, list, close, and delete voters.
+VARIATION_VOTER_ADMIN_TOKEN=
