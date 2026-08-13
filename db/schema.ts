@@ -42,11 +42,30 @@ export const votes = pgTable(
     // per variation".
     viewerId: text("viewer_id"),
     direction: voteDirection("direction").notNull(),
-    comment: text("comment"),
-    voterName: text("voter_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("votes_variation_viewer_unique").on(table.variationId, table.viewerId)]
+);
+
+export const comments = pgTable(
+  "comments",
+  {
+    id: text("id").primaryKey(),
+    variationId: text("variation_id")
+      .notNull()
+      .references(() => variations.id, { onDelete: "cascade" }),
+    // Anonymous viewer identity (the `vv_viewer` cookie). Nullable for the
+    // same reason as votes.viewerId above — Postgres treats NULLs as distinct
+    // in a unique index, so rows with an unknown viewer never collide with
+    // each other or with real comments. Every new comment sets this, which is
+    // what makes the unique index below enforce "one comment per viewer per
+    // variation" (a resubmission upserts rather than duplicating).
+    viewerId: text("viewer_id"),
+    comment: text("comment").notNull(),
+    voterName: text("voter_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("comments_variation_viewer_unique").on(table.variationId, table.viewerId)]
 );
 
 export type Voter = typeof voters.$inferSelect;
@@ -55,3 +74,5 @@ export type Variation = typeof variations.$inferSelect;
 export type NewVariation = typeof variations.$inferInsert;
 export type Vote = typeof votes.$inferSelect;
 export type NewVote = typeof votes.$inferInsert;
+export type Comment = typeof comments.$inferSelect;
+export type NewComment = typeof comments.$inferInsert;

@@ -15,11 +15,9 @@ export const addVariationSchema = z.object({
 
 export const castVoteSchema = z.object({
   direction: z.enum(["up", "down"]),
-  comment: z.string().trim().max(1000).optional(),
-  voterName: z.string().trim().max(100).optional(),
 });
 
-export const updateVoteSchema = z
+export const commentSchema = z
   .object({
     comment: z.string().trim().max(1000).optional(),
     voterName: z.string().trim().max(100).optional(),

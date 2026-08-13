@@ -115,7 +115,7 @@ export function VoterShell({
                   comment,
                   voterName,
                   createdAt: new Date(),
-                  direction: v.viewerVote ?? "up",
+                  direction: v.viewerVote ?? null,
                   isOwn: true,
                 },
                 ...v.comments,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createVoterSchema, addVariationSchema, castVoteSchema, updateVoteSchema } from "@/lib/validation";
+import { createVoterSchema, addVariationSchema, castVoteSchema, commentSchema } from "@/lib/validation";
 
 describe("createVoterSchema", () => {
   it("accepts a title only", () => {
@@ -42,32 +42,23 @@ describe("castVoteSchema", () => {
     expect(castVoteSchema.safeParse({ direction: "up" }).success).toBe(true);
   });
 
-  it("accepts a comment and voterName", () => {
-    const result = castVoteSchema.safeParse({
-      direction: "down",
-      comment: "too busy",
-      voterName: "Kevin",
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("rejects an invalid direction", () => {
     expect(castVoteSchema.safeParse({ direction: "sideways" }).success).toBe(false);
   });
 });
 
-describe("updateVoteSchema", () => {
+describe("commentSchema", () => {
   it("accepts a comment on its own", () => {
-    const result = updateVoteSchema.safeParse({ comment: "too busy" });
+    const result = commentSchema.safeParse({ comment: "too busy" });
     expect(result.success).toBe(true);
   });
 
   it("accepts a voterName on its own", () => {
-    const result = updateVoteSchema.safeParse({ voterName: "Kevin" });
+    const result = commentSchema.safeParse({ voterName: "Kevin" });
     expect(result.success).toBe(true);
   });
 
   it("rejects a body with neither comment nor voterName", () => {
-    expect(updateVoteSchema.safeParse({}).success).toBe(false);
+    expect(commentSchema.safeParse({}).success).toBe(false);
   });
 });

@@ -202,21 +202,22 @@ describe("VoterShell", () => {
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
   });
 
-  // G3/H2: the composer unlocks only after voting, and the submitted comment
-  // prepends immediately labeled "(You)".
-  it("unlocks and posts a comment after voting, prepending it labeled '(You)'", async () => {
+  // H2: the composer is enabled from the start (commenting no longer requires
+  // voting first), and the submitted comment prepends immediately labeled
+  // "(You)" once the viewer has also voted.
+  it("posts a comment after voting, prepending it labeled '(You)'", async () => {
     const user = userEvent.setup();
     stubApiFetch(async (url, init) => {
-      if (init?.method === "POST") {
+      if (init?.method === "POST" && typeof url === "string" && url.endsWith("/votes")) {
         return new Response(JSON.stringify({ vote: { id: "vote-a", direction: "up" }, state: "added" }), {
           status: 201,
         });
       }
-      return new Response(JSON.stringify({ vote: { id: "vote-a" } }), { status: 200 });
+      return new Response(JSON.stringify({ comment: { id: "comment-a" } }), { status: 200 });
     });
     render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
-    expect(screen.getByLabelText(/add a comment about option a/i)).toBeDisabled();
+    expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /thumbs up/i }));
     await screen.findByRole("button", { name: /thumbs up, 1 vote$/i });

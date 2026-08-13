@@ -39,7 +39,7 @@ const realFetch = global.fetch;
 afterEach(() => vi.restoreAllMocks());
 
 describe("CommentsPanel", () => {
-  it("shows the 'vote to unlock' hint and disables the composer before voting (G1/G3)", () => {
+  it("enables the composer for an active voter even when the viewer hasn't voted", () => {
     render(
       <CommentsPanel
         voterId="voter1"
@@ -48,22 +48,28 @@ describe("CommentsPanel", () => {
         onCommentSubmit={() => {}}
       />
     );
-    expect(screen.getByText(/vote to unlock commenting/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/add a comment about option a/i)).toBeDisabled();
-    expect(screen.getByLabelText(/send comment/i)).toBeDisabled();
+    expect(screen.queryByText(/vote to unlock commenting/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
   });
 
-  it("hides the hint and enables the composer once the viewer has voted", () => {
+  it("renders a comment with no associated vote with no thumb icon", () => {
     render(
       <CommentsPanel
         voterId="voter1"
-        variation={makeVariation({ viewerVote: "up" })}
+        variation={makeVariation({
+          viewerVote: null,
+          comments: [
+            { id: "c1", comment: "neutral note", voterName: "Kevin", createdAt: new Date(), direction: null, isOwn: false },
+          ],
+        })}
         voterStatus="active"
         onCommentSubmit={() => {}}
       />
     );
-    expect(screen.queryByText(/vote to unlock commenting/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
+    const commentText = screen.getByText("neutral note");
+    const item = commentText.closest("li");
+    expect(item).not.toBeNull();
+    expect(item?.querySelector("svg")).not.toBeInTheDocument();
   });
 
   it("disables the send button while the comment is empty and enables it once there's text (28Z-0)", async () => {
@@ -103,13 +109,13 @@ describe("CommentsPanel", () => {
     expect(screen.getByLabelText(/add a comment about option a/i)).toBeDisabled();
   });
 
-  it("PATCHes with no voteId, fires onCommentSubmit, and clears only the comment field", async () => {
+  it("POSTs to the comments endpoint, fires onCommentSubmit, and clears only the comment field", async () => {
     const user = userEvent.setup();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (typeof url === "string" && url.startsWith("/api/")) {
-          return new Response(JSON.stringify({ vote: { id: "vote1" } }), { status: 200 });
+          return new Response(JSON.stringify({ comment: { id: "comment1" } }), { status: 200 });
         }
         return realFetch(url, init);
       })
@@ -129,8 +135,8 @@ describe("CommentsPanel", () => {
     await user.click(screen.getByLabelText(/send comment/i));
 
     expect(fetch).toHaveBeenCalledWith(
-      "/api/voters/voter1/variations/a/votes",
-      expect.objectContaining({ method: "PATCH" })
+      "/api/voters/voter1/variations/a/comments",
+      expect.objectContaining({ method: "POST" })
     );
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
     expect(body).toEqual({ comment: "nice!", voterName: "Kevin" });

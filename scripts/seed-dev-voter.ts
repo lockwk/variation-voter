@@ -16,7 +16,7 @@ const SEED_TITLE = "Dark mode preview (seed)";
 // DATABASE_URL at import time) must be loaded dynamically, after .env.local is loaded.
 async function main() {
   const { db } = await import("../db/client");
-  const { createVoter, addVariation, castVote, attachCommentToVote, listVoters } = await import(
+  const { createVoter, addVariation, castVote, upsertComment, listVoters } = await import(
     "../db/queries"
   );
 
@@ -46,13 +46,13 @@ async function main() {
   });
 
   await castVote(db, embed.id, { direction: "up", viewerId: "seed-viewer-1" });
-  await attachCommentToVote(db, embed.id, "seed-viewer-1", {
+  await upsertComment(db, embed.id, "seed-viewer-1", {
     comment: "Love the darker nav, much easier on the eyes.",
     voterName: "Kevin",
   });
 
   await castVote(db, image.id, { direction: "down", viewerId: "seed-viewer-2" });
-  await attachCommentToVote(db, image.id, "seed-viewer-2", {
+  await upsertComment(db, image.id, "seed-viewer-2", {
     comment: "Not a fan of this one.",
   });
 
