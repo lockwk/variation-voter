@@ -45,3 +45,9 @@ npm run dev
 ```
 
 After cloning, run `node scripts/create.mjs` instead of the manual `.env.local` setup for a guided walkthrough.
+
+## Using the Agentation toolbar
+
+The Agentation annotation toolbar only appears in local development (`npm run dev`) — it's gated on `process.env.NODE_ENV === "development"` and is excluded from production builds. Use it in the browser to click and annotate elements on the page and leave visual feedback notes.
+
+To hand annotations back to a coding agent, set up the Agentation MCP server locally (optional, per-developer): run `npx add-mcp` (works with many agents) or `agentation-mcp init` (Claude Code). It defaults to port 4747 and exposes tools like `agentation_get_all_pending`. Restart your coding agent after MCP setup so it picks up annotations.
