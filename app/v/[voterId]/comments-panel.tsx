@@ -130,7 +130,7 @@ export function CommentsPanel({
       <div className="relative flex-1 min-h-0">
         <ul ref={listRef} className="flex h-full flex-col gap-6 overflow-y-auto scrollbar-hide">
           {!variation || variation.comments.length === 0 ? (
-            <li className="text-sm text-[#A1A1AA]">No comments yet.</li>
+            <li className="mt-3 text-center text-sm text-[#A1A1AA]">No comments yet.</li>
           ) : (
             variation.comments.map((item) => <CommentItem key={item.id} comment={item} />)
           )}
