@@ -31,8 +31,35 @@ describe("addVariationSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts an image variation", () => {
+    const result = addVariationSchema.safeParse({
+      title: "Screenshot",
+      kind: "image",
+      src: "https://preview.example/a.png",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an embed variation", () => {
+    const result = addVariationSchema.safeParse({
+      title: "Embedded",
+      kind: "embed",
+      src: "<iframe></iframe>",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects an invalid kind", () => {
     const result = addVariationSchema.safeParse({ title: "x", kind: "video", src: "y" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects kind:\"app\" — app variations must go through the dedicated /apps upload route, not this generic schema", () => {
+    const result = addVariationSchema.safeParse({
+      title: "My app",
+      kind: "app",
+      src: "/api/apps/some-bundle/index.html",
+    });
     expect(result.success).toBe(false);
   });
 });

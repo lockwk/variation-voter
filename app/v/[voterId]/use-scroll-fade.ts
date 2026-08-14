@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+// Bottom scroll-fade overlay (E4/H3), shared by the variation list and
+// comments panel — shown only when the list actually overflows (see
+// useScrollFade below).
+export const SCROLL_FADE_STYLE = { background: "linear-gradient(180deg, transparent, rgba(33,33,33,0.35))" };
+
 /**
  * Tracks whether a scrollable element currently overflows its box, so a
  * bottom scroll-fade (E4/H3) can be shown only when there's actually more

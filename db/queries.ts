@@ -2,8 +2,9 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 import { voters, variations, votes, comments } from "./schema";
-import type { Vote } from "./schema";
+import type { Vote, Variation } from "./schema";
 import { newId } from "@/lib/ids";
+import { getStorage } from "@/lib/storage";
 
 // Postgres' `= NULL` never matches (even other NULLs), so a "does this row
 // belong to this viewer" condition needs isNull() when the viewer is unknown
@@ -38,7 +39,7 @@ export async function listVoters(db: Database) {
 export async function addVariation(
   db: Database,
   voterId: string,
-  input: { title: string; description?: string; kind: "url" | "image" | "embed"; src: string }
+  input: { title: string; description?: string; kind: Variation["kind"]; src: string }
 ) {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -50,6 +51,17 @@ export async function addVariation(
     .values({ id, voterId, position: count, ...input })
     .returning();
   return variation;
+}
+
+/**
+ * Update a variation's `src` in place. Used by the app-upload endpoint,
+ * which creates the variation row with a `"pending"` placeholder src (so the
+ * id exists before the bundle is stored), then points it at the served
+ * `/apps/<id>/index.html` path once storage succeeds.
+ */
+export async function setVariationSrc(db: Database, variationId: string, src: string): Promise<Variation | null> {
+  const [variation] = await db.update(variations).set({ src }).where(eq(variations.id, variationId)).returning();
+  return variation ?? null;
 }
 
 export async function closeVoter(db: Database, voterId: string) {
@@ -83,7 +95,7 @@ export type VariationWithAggregates = {
   id: string;
   title: string;
   description: string | null;
-  kind: "url" | "image" | "embed";
+  kind: Variation["kind"];
   src: string;
   position: number;
   createdAt: Date;
@@ -270,11 +282,39 @@ export async function upsertComment(
 
 export async function purgeExpiredAndArchivedVoters(db: Database, now: Date, archiveGraceMs: number) {
   const graceDeadline = new Date(now.getTime() - archiveGraceMs);
-  const deleted = await db
-    .delete(voters)
-    .where(
-      sql`${voters.expiresAt} < ${now} or (${voters.status} = 'archived' and ${voters.archivedAt} < ${graceDeadline})`
-    )
-    .returning({ id: voters.id });
+  const purgeCondition = sql`${voters.expiresAt} < ${now} or (${voters.status} = 'archived' and ${voters.archivedAt} < ${graceDeadline})`;
+
+  // Collect ids of "app" variations belonging to the voters about to be
+  // purged *before* deleting anything, so we know which storage bundles to
+  // clean up once the DB delete (which cascades variations/votes/comments)
+  // succeeds. One query, joined straight off the same purge condition.
+  //
+  // This SELECT and the cascading DELETE below are two separate statements,
+  // not one transaction — the neon-http driver has no interactive
+  // transaction support, so there's no way to wrap both in a single atomic
+  // unit here. That leaves a tiny drift window where a voter could in theory
+  // change between the two statements, but it's acceptable: the purge
+  // condition only ever matches voters that are already expired or archived
+  // past their grace period, states that don't get reversed, so nothing
+  // meaningful can change out from under this in practice.
+  const appVariationRows = await db
+    .select({ id: variations.id })
+    .from(variations)
+    .innerJoin(voters, eq(voters.id, variations.voterId))
+    .where(and(eq(variations.kind, "app"), purgeCondition));
+
+  const deleted = await db.delete(voters).where(purgeCondition).returning({ id: voters.id });
+
+  // Best-effort: a storage failure must not throw out of the cron job, and
+  // one bundle's failure shouldn't stop the rest from being cleaned up.
+  const storage = getStorage();
+  for (const { id } of appVariationRows) {
+    try {
+      await storage.deleteBundle(id);
+    } catch (error) {
+      console.error(`Failed to delete bundle for purged app variation ${id}`, error);
+    }
+  }
+
   return deleted.map((row) => row.id);
 }
