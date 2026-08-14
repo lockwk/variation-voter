@@ -8,11 +8,13 @@ const VARIATION_ID_PATTERN = /^[0-9a-z]{10}$/;
  * `/apps/<variationId>/<relativePath>`. With no trailing path segments this
  * serves `index.html` — the entry point referenced by a variation's `src`.
  *
- * Every served response carries `Content-Security-Policy: sandbox
- * allow-scripts;`, which forces the document into a unique opaque origin
- * whether it's framed or navigated to directly. That neutralizes same-origin
- * escape and stored-XSS against this app's origin (cookies, DOM, `/api`)
- * regardless of how the bundle is loaded.
+ * ISOLATION: bundles are served from THIS origin and framed with
+ * `allow-scripts allow-same-origin` (same posture as `url` variations). A CSP
+ * `sandbox` header would give stronger opaque-origin isolation, but forcing an
+ * opaque origin reliably prevents the bundle's `crossorigin` ES module from
+ * loading in the iframe (blank render). App bundles are admin/agent-built
+ * (trusted), so this is acceptable for now; the real hardening is serving
+ * bundles from a dedicated origin — tracked in KEV-79.
  */
 export async function GET(
   req: Request,
@@ -34,11 +36,8 @@ export async function GET(
   return new Response(Buffer.from(file.data), {
     headers: {
       "Content-Type": file.contentType,
-      // Forces this response into a unique opaque origin (see doc comment
-      // above) — the primary defense against same-origin escape/stored-XSS.
-      "Content-Security-Policy": "sandbox allow-scripts;",
-      // Needed so the bundle's `crossorigin` module scripts still load
-      // correctly under the opaque origin the CSP above puts it in.
+      // Permissive resource headers so a future move to a dedicated bundle
+      // origin (KEV-79) works without changes; harmless while same-origin.
       "Access-Control-Allow-Origin": "*",
       "Cross-Origin-Resource-Policy": "cross-origin",
       // Only hashed assets (content-addressed, immutable filenames) get a

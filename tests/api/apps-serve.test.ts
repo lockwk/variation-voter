@@ -66,12 +66,15 @@ describe("GET /apps/:variationId/*", () => {
     expect(response.status).toBe(404);
   });
 
-  it("sets Content-Security-Policy: sandbox allow-scripts on a served file", async () => {
+  // Bundles are served same-origin without a CSP sandbox header: forcing an
+  // opaque origin reliably breaks the bundle's ES module from loading in the
+  // iframe. Isolation hardening (dedicated origin) is tracked in KEV-79.
+  it("does not set a Content-Security-Policy sandbox header", async () => {
     storedBundleIds.push(VALID_ID);
     await getStorage().putBundle(VALID_ID, new Map([["index.html", encode("<html></html>")]]));
 
     const response = await appRequest(VALID_ID);
-    expect(response.headers.get("Content-Security-Policy")).toBe("sandbox allow-scripts;");
+    expect(response.headers.get("Content-Security-Policy")).toBeNull();
   });
 
   it("caches hashed assets as immutable but not index.html or root files", async () => {

@@ -42,23 +42,16 @@ function VariationMedia({ variation }: { variation: VariationWithAggregates }) {
     );
   }
   if (variation.kind === "app") {
-    // Isolation for app bundles comes from the RESPONSE HEADER
-    // `Content-Security-Policy: sandbox allow-scripts;` set on every file the
-    // bundle-serving route returns (see app/apps/[variationId]/[[...path]]/route.ts).
-    // That CSP forces the served document into its own unique opaque origin —
-    // both when framed here AND on direct navigation — so it can't reach the
-    // host origin's cookies, DOM, or /api routes, and (allow-scripts only) it
-    // also can't top-navigate, submit forms, or open popups.
-    //
-    // We deliberately do NOT set a restrictive iframe `sandbox` attribute: an
-    // iframe-level sandbox without allow-same-origin puts the frame in a nested
-    // opaque context where the bundle's `crossorigin` ES module script never
-    // loads (blank render), and it would add nothing the CSP header doesn't
-    // already enforce. The CSP header is the single source of isolation.
+    // Same sandbox posture as the `url` kind: `allow-scripts allow-same-origin`
+    // renders reliably (a stricter opaque-origin sandbox breaks the bundle's
+    // ES module loading — blank render). App bundles are admin/agent-built and
+    // served from our own origin, so this is an acceptable interim posture;
+    // stronger isolation via a dedicated bundle origin is tracked in KEV-79.
     return (
       <iframe
         title={variation.title}
         src={variation.src}
+        sandbox="allow-scripts allow-same-origin"
         className="w-full h-full min-h-[400px] border-0"
       />
     );
