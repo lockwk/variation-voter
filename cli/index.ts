@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { zipSync } from "fflate";
 import {
   createVoterRequest,
   addVariationRequest,
+  addAppRequest,
   listVotersRequest,
   closeVoterRequest,
   deleteVoterRequest,
 } from "./api-client";
 import { getCliConfig } from "./config";
 import { resolveVariationInput } from "./resolve-variation-input";
+import { readDirToMap } from "./read-dir-to-map";
 
 const program = new Command();
 program.name("voter");
@@ -43,6 +46,25 @@ program
       src,
     });
     console.log(`Added variation ${result.variation.id} (${kind})`);
+  });
+
+program
+  .command("add-app <voterId>")
+  .requiredOption("--title <title>")
+  .option("--description <description>")
+  .requiredOption("--dir <distDir>", "the built Vite output directory")
+  .action(async (voterId, options) => {
+    const fileMap = await readDirToMap(options.dir);
+    const zipInput: Record<string, Uint8Array> = {};
+    for (const [relativePath, data] of fileMap) zipInput[relativePath] = data;
+    const zipBytes = zipSync(zipInput);
+
+    const result = await addAppRequest(voterId, {
+      title: options.title,
+      description: options.description,
+      zipBytes,
+    });
+    console.log(`Added app variation ${result.variation.id} → ${result.variation.src}`);
   });
 
 program.command("list").action(async () => {

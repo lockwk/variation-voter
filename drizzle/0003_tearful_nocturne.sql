@@ -1,0 +1,1 @@
+ALTER TYPE "public"."variation_kind" ADD VALUE 'app';

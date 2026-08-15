@@ -1,7 +1,7 @@
 import { pgTable, text, integer, timestamp, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const voterStatus = pgEnum("voter_status", ["active", "archived"]);
-export const variationKind = pgEnum("variation_kind", ["url", "image", "embed"]);
+export const variationKind = pgEnum("variation_kind", ["url", "image", "embed", "app"]);
 export const voteDirection = pgEnum("vote_direction", ["up", "down"]);
 
 export const voters = pgTable("voters", {

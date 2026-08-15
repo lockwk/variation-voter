@@ -40,3 +40,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# standalone variation-app builds (their real output is committed under
+# public/variations/**; only the local install/dist scratch is ignored)
+variation-apps/*/node_modules/
+variation-apps/*/dist/
+
+# local bundle storage for "app" variations (see lib/storage/local-fs.ts) —
+# used in dev/self-host when BLOB_READ_WRITE_TOKEN isn't set; on Vercel,
+# bundles live in Vercel Blob instead
+.bundles/

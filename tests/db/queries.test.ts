@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db/client";
 import {
   createVoter,
@@ -11,7 +11,9 @@ import {
   toggleVote,
   upsertComment,
   purgeExpiredAndArchivedVoters,
+  setVariationSrc,
 } from "@/db/queries";
+import { getStorage } from "@/lib/storage";
 
 describe("createVoter", () => {
   it("defaults expiry to 7 days out", async () => {
@@ -38,6 +40,23 @@ describe("addVariation", () => {
     const b = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
     expect(a.position).toBe(0);
     expect(b.position).toBe(1);
+  });
+});
+
+describe("setVariationSrc", () => {
+  it("updates the variation's src and returns the updated row", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "app", src: "pending" });
+
+    const updated = await setVariationSrc(db, variation.id, `/apps/${variation.id}/index.html`);
+
+    expect(updated?.src).toBe(`/apps/${variation.id}/index.html`);
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].src).toBe(`/apps/${variation.id}/index.html`);
+  });
+
+  it("returns null for a nonexistent variation id", async () => {
+    expect(await setVariationSrc(db, "does-not-exist", "/apps/x/index.html")).toBeNull();
   });
 });
 
@@ -288,5 +307,40 @@ describe("purgeExpiredAndArchivedVoters", () => {
     const voter = await createVoter(db, { title: "keep me" });
     const deletedIds = await purgeExpiredAndArchivedVoters(db, new Date(), 86_400_000);
     expect(deletedIds).not.toContain(voter.id);
+  });
+
+  describe("storage cleanup", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("deletes the bundle for a purged voter's app variation, but not for a non-app variation", async () => {
+      const voter = await createVoter(db, { title: "x", expiresInDays: -1 });
+      const appVariation = await addVariation(db, voter.id, {
+        title: "App",
+        kind: "app",
+        src: `/apps/pending/index.html`,
+      });
+      const urlVariation = await addVariation(db, voter.id, { title: "URL", kind: "url", src: "https://a" });
+
+      const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
+
+      const deletedIds = await purgeExpiredAndArchivedVoters(db, new Date(), 86_400_000);
+
+      expect(deletedIds).toContain(voter.id);
+      expect(deleteBundle).toHaveBeenCalledWith(appVariation.id);
+      expect(deleteBundle).not.toHaveBeenCalledWith(urlVariation.id);
+      expect(deleteBundle).toHaveBeenCalledTimes(1);
+    });
+
+    it("still returns the purged voter ids even though no app variations existed", async () => {
+      const voter = await createVoter(db, { title: "x", expiresInDays: -1 });
+      const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
+
+      const deletedIds = await purgeExpiredAndArchivedVoters(db, new Date(), 86_400_000);
+
+      expect(deletedIds).toContain(voter.id);
+      expect(deleteBundle).not.toHaveBeenCalled();
+    });
   });
 });

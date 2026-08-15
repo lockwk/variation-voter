@@ -3,7 +3,8 @@
 import { ThumbsDown, ThumbsUp } from "@untitledui/icons";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { cx } from "@/utils/cx";
-import { useScrollFade } from "./use-scroll-fade";
+import { ThumbUpVoted, ThumbDownVoted } from "./voted-thumb-icons";
+import { useScrollFade, SCROLL_FADE_STYLE } from "./use-scroll-fade";
 import type { VariationWithAggregates, VoteDirection } from "@/db/queries";
 
 export type SortMode = "all" | "new" | "top";
@@ -21,10 +22,6 @@ export function sortVariations(
 // The "all" mode still sorts by position, but the design renames its
 // displayed tab label to "Version" (D2) — the SortMode key is unchanged.
 const SORT_LABELS: Record<SortMode, string> = { all: "Version", new: "New", top: "Top" };
-
-// Bottom scroll-fade overlay (E4) — matches the design spec's literal value,
-// shown only when the list actually overflows (see useScrollFade).
-const SCROLL_FADE_STYLE = { background: "linear-gradient(180deg, transparent, rgba(33,33,33,0.35))" };
 
 export function VariationList({
   variations,
@@ -190,9 +187,18 @@ function VoteSegment({
   }
 
   const isVotedThisDirection = variation.viewerVote === direction;
-  const style = isVotedThisDirection
-    ? { backgroundColor: direction === "up" ? "#86EFAC" : "#FCA5A5" }
-    : { backgroundColor: "#E8E8E8", boxShadow: "inset 0 -0.5px 0 #0000004D", borderTop: "0.5px solid #FFFFFF80" };
+  // The raised bevel (top highlight + bottom shadow) is constant across states so
+  // the button never changes size or "pops" a border when its vote state flips —
+  // only the background color changes. Both edges are INSET box-shadows (not a real
+  // border) so they add zero layout height.
+  const style = {
+    backgroundColor: isVotedThisDirection
+      ? direction === "up"
+        ? "#86EFAC"
+        : "#FCA5A5"
+      : "#E8E8E8",
+    boxShadow: "inset 0 0.5px 0 #FFFFFF80, inset 0 -0.5px 0 #0000004D",
+  };
 
   return (
     <button
@@ -214,7 +220,15 @@ function VoteSegment({
         "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default"
       )}
     >
-      <Icon aria-hidden="true" className="size-4" color="#212121" fill={isVotedThisDirection ? "#212121" : "none"} />
+      {isVotedThisDirection ? (
+        direction === "up" ? (
+          <ThumbUpVoted className="size-4" />
+        ) : (
+          <ThumbDownVoted className="size-4" />
+        )
+      ) : (
+        <Icon aria-hidden="true" className="size-4" color="#212121" fill="none" />
+      )}
       <span className="w-5 text-center text-sm font-semibold tabular-nums text-[#212121]">{count}</span>
     </button>
   );

@@ -4,11 +4,8 @@ import { useState } from "react";
 import { ArrowUp, ThumbsDown, ThumbsUp } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 import { relativeTimeFrom } from "@/lib/relative-time";
-import { useScrollFade } from "./use-scroll-fade";
+import { useScrollFade, SCROLL_FADE_STYLE } from "./use-scroll-fade";
 import type { VariationComment, VariationWithAggregates } from "@/db/queries";
-
-// H3: same scroll-fade treatment as the variation list (E4).
-const SCROLL_FADE_STYLE = { background: "linear-gradient(180deg, transparent, rgba(33,33,33,0.35))" };
 
 export function CommentsPanel({
   voterId,
@@ -111,11 +108,14 @@ export function CommentsPanel({
             aria-label="Send comment"
             disabled={!canSubmit}
             onClick={submit}
-            style={
-              canSubmit
-                ? { boxShadow: "inset 0 -0.5px 0 #0000004D", borderTop: "0.5px solid #FFFFFF80" }
-                : undefined
-            }
+            // Constant raised bevel in every state (disabled + enabled) as INSET
+            // box-shadows — never changes the button's size and never "pops" in;
+            // only the background color transitions between states.
+            // Top-highlight alpha is intentionally dimmer than the vote buttons'
+            // (#FFFFFF40 vs #FFFFFF80): this button's disabled state sits on a
+            // dark background, where the brighter highlight read too hot. Don't
+            // "helpfully" homogenize these.
+            style={{ boxShadow: "inset 0 0.5px 0 #FFFFFF40, inset 0 -0.5px 0 #0000004D" }}
             className={cx(
               "flex size-8 shrink-0 items-center justify-center rounded-[4px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed",
               canSubmit ? "bg-[#E8E8E8]" : "bg-[#52525B]"
@@ -130,7 +130,7 @@ export function CommentsPanel({
       <div className="relative flex-1 min-h-0">
         <ul ref={listRef} className="flex h-full flex-col gap-6 overflow-y-auto scrollbar-hide">
           {!variation || variation.comments.length === 0 ? (
-            <li className="text-sm text-[#A1A1AA]">No comments yet.</li>
+            <li className="mt-3 text-center text-sm text-[#A1A1AA]">No comments yet.</li>
           ) : (
             variation.comments.map((item) => <CommentItem key={item.id} comment={item} />)
           )}
