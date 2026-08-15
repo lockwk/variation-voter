@@ -1,6 +1,6 @@
 "use client";
 
-import DOMPurify from "isomorphic-dompurify";
+import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/application/empty-state/empty-state";
 import type { VariationWithAggregates } from "@/db/queries";
 
@@ -60,15 +60,36 @@ function VariationMedia({ variation }: { variation: VariationWithAggregates }) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={variation.src} alt={variation.title} className="w-full h-auto" />;
   }
-  return (
-    <div
-      className="p-4"
-      dangerouslySetInnerHTML={{
-        __html: DOMPurify.sanitize(variation.src, {
-          ADD_TAGS: ["iframe"],
-          ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "loading", "referrerpolicy"],
-        }),
-      }}
-    />
-  );
+  return <EmbedHtml html={variation.src} />;
+}
+
+// DOMPurify (and its server-side jsdom fallback) must never be pulled into
+// the server render path — jsdom's dep chain includes ESM-only packages that
+// crash under `require()` in Next's serverless bundle. Effects don't run
+// during SSR, so sanitizing here (behind a dynamic import) keeps jsdom out
+// of the server module graph entirely; the browser build of DOMPurify runs
+// natively in the client without touching jsdom.
+function EmbedHtml({ html }: { html: string }) {
+  const [sanitizedHtml, setSanitizedHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const DOMPurify = (await import("isomorphic-dompurify")).default;
+      const clean = DOMPurify.sanitize(html, {
+        ADD_TAGS: ["iframe"],
+        ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "loading", "referrerpolicy"],
+      });
+      if (!cancelled) setSanitizedHtml(clean);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [html]);
+
+  if (sanitizedHtml === null) {
+    return <div className="p-4" />;
+  }
+
+  return <div className="p-4" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />;
 }
