@@ -73,9 +73,31 @@ export async function closeVoter(db: Database, voterId: string) {
   return voter ?? null;
 }
 
+// Best-effort deletion of app-variation storage bundles. A storage failure must
+// never throw out of a DB delete, and one bundle's failure must not stop the rest.
+async function deleteAppBundles(ids: string[]) {
+  if (ids.length === 0) return;
+  const storage = getStorage();
+  for (const id of ids) {
+    try {
+      await storage.deleteBundle(id);
+    } catch (error) {
+      console.error(`Failed to delete bundle for app variation ${id}`, error);
+    }
+  }
+}
+
 export async function deleteVoter(db: Database, voterId: string) {
+  const appVariationRows = await db
+    .select({ id: variations.id })
+    .from(variations)
+    .where(and(eq(variations.kind, "app"), eq(variations.voterId, voterId)));
+
   const [voter] = await db.delete(voters).where(eq(voters.id, voterId)).returning();
-  return voter ?? null;
+  if (!voter) return null;
+
+  await deleteAppBundles(appVariationRows.map((row) => row.id));
+  return voter;
 }
 
 export type VoteDirection = "up" | "down";
@@ -305,16 +327,7 @@ export async function purgeExpiredAndArchivedVoters(db: Database, now: Date, arc
 
   const deleted = await db.delete(voters).where(purgeCondition).returning({ id: voters.id });
 
-  // Best-effort: a storage failure must not throw out of the cron job, and
-  // one bundle's failure shouldn't stop the rest from being cleaned up.
-  const storage = getStorage();
-  for (const { id } of appVariationRows) {
-    try {
-      await storage.deleteBundle(id);
-    } catch (error) {
-      console.error(`Failed to delete bundle for purged app variation ${id}`, error);
-    }
-  }
+  await deleteAppBundles(appVariationRows.map((row) => row.id));
 
   return deleted.map((row) => row.id);
 }
