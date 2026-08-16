@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "voter": "tsx cli/index.ts"
+    "voter": "tsx cli/index.ts",
+    "variation:scaffold": "node pipeline/scaffold-variation.mjs",
+    "variation:publish": "tsx pipeline/publish-voter.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

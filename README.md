@@ -35,6 +35,47 @@ npm run voter -- link <voterId>
 
 Send the printed link to whoever needs to weigh in. `npm run voter -- close <voterId>` makes it read-only; `npm run voter -- delete <voterId>` removes it immediately. Otherwise it expires automatically after 7 days.
 
+Variations can also be self-contained apps instead of a URL/image/embed — build a
+Vite (or similar) bundle to a `dist/` directory, then upload it directly:
+
+```bash
+npm run voter -- add-app <voterId> --title "Option C" --dir path/to/dist
+```
+
+This zips `dist/` and uploads it; the voter page serves it same-origin in an iframe.
+
+## Building a voter from an idea (pipeline/skill)
+
+To go from a freeform idea straight to a voter with N agent-built variations, use
+the `build-variation-voter` skill (`.claude/skills/build-variation-voter/SKILL.md`)
+in Claude Code. It expands your idea into distinct briefs, dispatches parallel
+build subagents, and publishes the result — you get back a real `/v/<id>` link.
+
+Under the hood the skill drives two deterministic helper scripts in `pipeline/`,
+which you can also run by hand:
+
+```bash
+# Copy the build template into a fresh per-run, per-slug scaffold
+npm run variation:scaffold -- <slug> --run <runId>
+
+# After each scaffold is built out (npm run build → dist/), publish them all
+npm run variation:publish -- path/to/manifest.json
+```
+
+The manifest passed to `variation:publish` looks like:
+
+```json
+{
+  "voter": { "title": "Settings page redesign", "description": "optional" },
+  "variations": [
+    { "title": "Sidebar nav", "description": "optional", "distDir": ".variations/<run>/sidebar-nav/dist" }
+  ]
+}
+```
+
+At least 2 variations need a valid `dist/index.html` or the script aborts without
+creating a voter.
+
 ## Local development
 
 ```bash

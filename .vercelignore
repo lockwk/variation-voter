@@ -1,0 +1,7 @@
+# Pipeline working dirs & local-only artifacts — not part of the Next build
+.variations/
+.bundles/
+.context/
+
+# Standalone variation-app source (built bundles are uploaded via add-app, not served from here)
+variation-apps/

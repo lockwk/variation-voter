@@ -50,3 +50,8 @@ variation-apps/*/dist/
 # used in dev/self-host when BLOB_READ_WRITE_TOKEN isn't set; on Vercel,
 # bundles live in Vercel Blob instead
 .bundles/
+
+# scratch scaffolds/builds produced by the variation pipeline
+# (pipeline/scaffold-variation.mjs, pipeline/publish-voter.ts) — this also
+# covers each scaffold's copied node_modules/, so no separate rule is needed
+.variations/
