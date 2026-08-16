@@ -82,6 +82,51 @@ describe("closeVoter / deleteVoter", () => {
     const detail = await getVoterDetail(db, voter.id);
     expect(detail).toBeNull();
   });
+
+  describe("storage cleanup", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("deletes the bundle for an app variation, but not for a url variation or the voter id", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const appVariation = await addVariation(db, voter.id, {
+        title: "App",
+        kind: "app",
+        src: `/apps/pending/index.html`,
+      });
+      const urlVariation = await addVariation(db, voter.id, { title: "URL", kind: "url", src: "https://a" });
+
+      const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
+
+      await deleteVoter(db, voter.id);
+
+      expect(deleteBundle).toHaveBeenCalledWith(appVariation.id);
+      expect(deleteBundle).not.toHaveBeenCalledWith(urlVariation.id);
+      expect(deleteBundle).not.toHaveBeenCalledWith(voter.id);
+      expect(deleteBundle).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not delete any bundle when archiving a voter", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      await addVariation(db, voter.id, { title: "App", kind: "app", src: `/apps/pending/index.html` });
+
+      const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
+
+      await closeVoter(db, voter.id);
+
+      expect(deleteBundle).not.toHaveBeenCalled();
+    });
+
+    it("returns null and does not delete any bundle for a nonexistent voter", async () => {
+      const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
+
+      const result = await deleteVoter(db, "does-not-exist");
+
+      expect(result).toBeNull();
+      expect(deleteBundle).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe("listVoters", () => {
