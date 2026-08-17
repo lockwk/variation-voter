@@ -82,14 +82,29 @@ creating a voter.
 
 ## Local development
 
+The guided path — no manual `git clone` needed, works from an empty folder:
+
+```bash
+npx create-variation-voter my-voter
+cd my-voter
+npm install
+npm run db:migrate
+npm run dev
+```
+
+`create-variation-voter` downloads the app into `my-voter/` and prompts you
+for `DATABASE_URL` and `PUBLIC_BASE_URL`, auto-generating `ADMIN_TOKEN` and
+`CRON_SECRET` into `my-voter/.env.local`.
+
+If you've already cloned the repo yourself, set up `.env.local` manually
+instead:
+
 ```bash
 npm install
 cp .env.example .env.local   # fill in DATABASE_URL, ADMIN_TOKEN, CRON_SECRET
 npm run db:migrate
 npm run dev
 ```
-
-After cloning, run `node scripts/create.mjs` instead of the manual `.env.local` setup for a guided walkthrough.
 
 ## Using the Agentation toolbar
 

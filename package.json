@@ -2,9 +2,6 @@
   "name": "variation-voter",
   "version": "0.1.0",
   "private": true,
-  "bin": {
-    "create-variation-voter": "./scripts/create.mjs"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
