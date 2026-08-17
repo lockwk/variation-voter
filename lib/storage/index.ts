@@ -13,6 +13,9 @@ let instance: BundleStorage | null = null;
  * deployed/Vercel case) bundles are stored in Vercel Blob; otherwise they're
  * stored on the local filesystem under `.bundles/` (local dev / self-host
  * baseline). The instance is memoized for the life of the process.
+ *
+ * The token is provisioned per Vercel environment, so production and non-prod
+ * (preview/dev) resolve to different Blob stores automatically — see docs/deploy.md.
  */
 export function getStorage(): BundleStorage {
   if (instance) return instance;
