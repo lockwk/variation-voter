@@ -21,6 +21,10 @@ once it's pushed.
 
 Each self-hosted instance runs against its own Neon database — nobody else's usage ever touches your backend or your bill.
 
+For the full env-var reference (per-environment `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`,
+`CRON_SECRET`, `ADMIN_TOKEN`, `PUBLIC_BASE_URL`), plus how to set up a dedicated test
+database, see [`docs/deploy.md`](docs/deploy.md).
+
 ## Using it
 
 ```bash
