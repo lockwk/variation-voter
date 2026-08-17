@@ -126,6 +126,32 @@ describe("closeVoter / deleteVoter", () => {
       expect(result).toBeNull();
       expect(deleteBundle).not.toHaveBeenCalled();
     });
+
+    // End-to-end regression for KEV-84: exercises the real storage driver
+    // (no vi.spyOn) so this fails if `deleteAppBundles` is ever removed from
+    // `deleteVoter`, not just if `storage.deleteBundle` stops being *called*.
+    it("actually removes the bundle from storage, not just invokes deleteBundle, when the voter is deleted", async () => {
+      const storage = getStorage();
+      const voter = await createVoter(db, { title: "x" });
+      const appVariation = await addVariation(db, voter.id, {
+        title: "App",
+        kind: "app",
+        src: `/apps/pending/index.html`,
+      });
+
+      try {
+        await storage.putBundle(appVariation.id, new Map([["index.html", new TextEncoder().encode("<html></html>")]]));
+        expect(await storage.getFile(appVariation.id, "index.html")).not.toBeNull();
+
+        await deleteVoter(db, voter.id);
+
+        expect(await storage.getFile(appVariation.id, "index.html")).toBeNull();
+      } finally {
+        // Safety net in case the assertion above fails before the bundle is
+        // actually removed — don't leave stray files under .bundles/.
+        await storage.deleteBundle(appVariation.id);
+      }
+    });
   });
 });
 
