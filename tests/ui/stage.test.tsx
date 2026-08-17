@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { Stage } from "@/app/v/[voterId]/stage";
 import type { VariationWithAggregates } from "@/db/queries";
@@ -52,7 +52,7 @@ describe("Stage", () => {
     );
   });
 
-  it("renders an iframe embed for kind 'embed' instead of stripping it", () => {
+  it("renders an iframe embed for kind 'embed' instead of stripping it", async () => {
     const { container } = render(
       <Stage
         variation={{
@@ -62,17 +62,23 @@ describe("Stage", () => {
         }}
       />
     );
-    const iframe = container.querySelector("iframe");
-    expect(iframe).not.toBeNull();
+    const iframe = await waitFor(() => {
+      const el = container.querySelector("iframe");
+      expect(el).not.toBeNull();
+      return el;
+    });
     expect(iframe).toHaveAttribute("src", "https://www.youtube.com/embed/xyz");
   });
 
-  it("still strips dangerous attributes like onerror from embed content", () => {
+  it("still strips dangerous attributes like onerror from embed content", async () => {
     const { container } = render(
       <Stage variation={{ ...base, kind: "embed", src: '<img src="x" onerror="alert(1)">' }} />
     );
-    const img = container.querySelector("img");
-    expect(img).not.toBeNull();
+    const img = await waitFor(() => {
+      const el = container.querySelector("img");
+      expect(el).not.toBeNull();
+      return el;
+    });
     expect(img).not.toHaveAttribute("onerror");
   });
 
