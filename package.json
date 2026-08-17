@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "voter": "tsx cli/index.ts",
+    "purge:nonprod": "tsx scripts/purge-nonprod.ts",
     "variation:scaffold": "node pipeline/scaffold-variation.mjs",
     "variation:publish": "tsx pipeline/publish-voter.ts"
   },
