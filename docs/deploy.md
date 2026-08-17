@@ -5,9 +5,21 @@ dev/preview, and test — each backed by its **own** Postgres database. This doc
 lists every environment variable the app needs, which environments need it, and
 how to set up the one-time local test-database step.
 
-For the quick "click Deploy, fill in four env vars" version, see the
-[README's Deploy section](../README.md#deploy-your-own-instance). This doc goes
-deeper: it's the reference for every env var across every environment.
+For the guided, agent-driven path, see the README's
+[Get started](../README.md#get-started) section — running the
+`install-variation-voter` skill is the recommended way to stand up an
+instance. For the manual "click Deploy, fill in four env vars" version, see
+[Manual deploy (reference)](../README.md#manual-deploy-reference). This doc
+goes deeper: it's the reference for every env var across every environment.
+
+### Workshop vs gallery
+
+Your local clone is the **workshop** (build template, `pipeline/` scripts,
+`node_modules` used to build variations); a deployed Vercel instance is the
+**gallery** (serves the public `/v/<id>` voter links). Publishing builds
+locally and uploads the built bundles to the deployed gallery over the admin
+API. See the README's [How it works](../README.md#how-it-works--workshop-vs-gallery)
+section for the full framing.
 
 ## Environments at a glance
 
@@ -173,9 +185,18 @@ and dev/preview if you're testing the authoring flow there.
 ### `PUBLIC_BASE_URL`
 
 Base URL used to build shareable voter links (e.g. `https://your-app.vercel.app`
-in production, `http://localhost:3000` in local dev). Needed in every
+in production, `http://localhost:3000` in local dev), read at request time by
+`shareUrlFor()` in `app/api/admin/voters/route.ts`. Needed in every
 environment that serves the app to real users or a browser — not needed for
 the test suite, which never renders a real shareable link.
+
+**A voter's printed link is only externally shareable when the deployed
+instance's `PUBLIC_BASE_URL` is set to its deployed URL.** If it's unset,
+`shareUrlFor()` falls back to `http://localhost:3000`, so the link only works
+on the author's own machine — anyone else opening it gets nothing. This is a
+separate setting from the CLI's `VARIATION_VOTER_URL` (read by `cli/config.ts`,
+used to decide where bundles get uploaded) — but for a working link, both
+must point at the **same** deployed host.
 
 ## Setting up the test database
 
@@ -266,3 +287,12 @@ Note that `empty-store` clears bundles only, not DB rows — the `voters`/
 `variations` rows are cleared by `npm run purge:nonprod` (or would dangle
 otherwise pointing at deleted bundles), so for a full non-prod reset you'd
 use both.
+
+## Known limitations
+
+App-variation bundles are served **same-origin** and framed with
+`sandbox="allow-scripts allow-same-origin"` (`app/v/[voterId]/stage.tsx`).
+That's not a strong security boundary — it's acceptable only for **trusted,
+agent-built content**, which is exactly this tool's model. Stronger isolation
+via a dedicated bundle origin is tracked as a future improvement (KEV-79). See
+also the README's [Known limitations](../README.md#known-limitations) section.
