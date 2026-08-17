@@ -204,5 +204,65 @@ real Blob store, so no Blob provisioning is needed just to run `npm test`.
 
 The cleanup cron (`GET /api/cron/cleanup`) only runs automatically in
 production (Vercel Cron is a production-only feature), so dev/preview data and
-bundles don't get automatically purged. See the deferred Chunk B work for a
-documented manual/scheduled non-prod purge path.
+bundles don't get automatically purged. Two mechanisms are available for
+non-prod:
+
+### `npm run purge:nonprod`
+
+Runs the same cleanup the cron runs: it triggers `GET /api/cron/cleanup`,
+which purges expired voters plus archived voters past the 24h grace period,
+along with their app-variation bundles. This only removes voters that are
+actually expired/archived — it is not a wholesale wipe.
+
+It targets a configurable base URL, resolved in this order:
+`VARIATION_VOTER_URL` → `PUBLIC_BASE_URL` → `http://localhost:3000`, and
+authenticates with `CRON_SECRET` (read from `.env.local` or the environment).
+
+Usage examples:
+
+```bash
+# Against local dev — run the dev server in one terminal:
+npm run dev
+# ...then in another terminal (uses localhost:3000 + .env.local's CRON_SECRET):
+npm run purge:nonprod
+
+# Against a preview deployment:
+VARIATION_VOTER_URL=https://<preview>.vercel.app CRON_SECRET=<that env's secret> npm run purge:nonprod
+```
+
+### Wholesale escape hatch — `vercel blob empty-store`
+
+For clearing **all** non-prod bundle objects at once (e.g. resetting the
+non-prod store), use the Vercel CLI's `empty-store` command (verified against
+Vercel CLI 56.3.2 and the current docs, updated 2026-07-15):
+
+```bash
+# Confirm the non-prod store's id and read-write token:
+vercel blob list-stores
+
+# Empty the non-prod store (permanent, irreversible; --yes skips the prompt).
+# --rw-token is what scopes the wipe to a specific store, so pass the
+# non-prod store's read-write token here:
+vercel blob empty-store --rw-token <nonprod-rw-token> --yes
+```
+
+`empty-store` deletes every blob in the targeted store; this is **permanent
+and cannot be undone**. `--yes` (or `-y`) skips the confirmation prompt, which
+is useful in CI/agent contexts. Note that `empty-store` does **not** take a
+store-id argument — it empties whichever store the resolved Blob credentials
+select (`.vercel` env files, then `BLOB_READ_WRITE_TOKEN`/OIDC env vars, then
+the linked project's connected store). Always scope it explicitly by passing
+the non-prod store's read-write token via `--rw-token`; do not rely on the
+ambient/linked credentials, which may point at the production store.
+
+**[KEV-86](#per-environment-blob-store-kev-86) gave non-prod its own isolated
+Blob store (`variation-voter-nonprod`), separate from production. That
+isolation is only protective when the command is actually pointed at the
+non-prod store via its `--rw-token` — the separate store existing does not by
+itself prevent an `empty-store` run scoped (by ambient credentials) at
+production.**
+
+Note that `empty-store` clears bundles only, not DB rows — the `voters`/
+`variations` rows are cleared by `npm run purge:nonprod` (or would dangle
+otherwise pointing at deleted bundles), so for a full non-prod reset you'd
+use both.
