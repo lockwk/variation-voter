@@ -92,6 +92,62 @@ PR 1 and PR 2 are independent and run in **parallel**. PR 3 wires them once both
 
 ---
 
+## Starter prompts (hand these to the build subagents)
+
+Each PR's code is written by a **Sonnet 5 subagent** working on its own branch off `main`. Copy the matching block verbatim as the subagent's kickoff prompt. All three assume the subagent reads this roadmap first for shared context (workshop = local clone, gallery = Vercel deploy).
+
+### PR 1 — `feat/real-installer`
+
+> You are implementing PR 1 of `docs/plans/2026-08-16-npm-distribution-roadmap.md` (read it first for context). Work on branch `feat/real-installer` off `main`.
+>
+> **Goal:** make `npx create-variation-voter <dir>` work from an empty directory — today `scripts/create.mjs` only writes `.env.local` into an *already-cloned* repo.
+>
+> **Do:**
+> 1. Rework `scripts/create.mjs` so it (a) **fetches the app** into a new/empty target directory — use a tarball/degit-style download of the public GitHub repo (no `.git` history needed), guard against a non-empty target, then (b) runs the existing guided `.env.local` prompts (`DATABASE_URL`, `PUBLIC_BASE_URL`, auto-generate `ADMIN_TOKEN` + `CRON_SECRET`) inside that directory. Preserve the current env-generation logic exactly.
+> 2. Package the create CLI so it publishes cleanly to npm as `create-variation-voter` (correct `bin`, `files` allowlist, `main`/`exports` as needed, node engine, zero-or-minimal deps). Do **not** un-private or publish the main app package — only the create CLI is meant for npm. If a separate thin package dir is cleaner than the root `package.json`, do that and explain the layout in the PR body.
+> 3. Fix the README contradiction: pick `npx create-variation-voter` as the single documented entry point and remove/replace the `node scripts/create.mjs` instruction.
+> 4. Update `tests/scripts/create.test.ts` to cover the new fetch-into-empty-dir behavior; keep all existing assertions that still apply. Mock the network fetch — tests must not hit GitHub.
+>
+> **Constraints:** don't fill in the real `<owner>/<repo>` in the README Deploy button or actually publish anything — that's the operational Step R. Leave a clearly-marked placeholder/TODO where the repo slug is needed. Don't touch the voter engine, DB schema, or the `build-variation-voter` skill.
+>
+> **Verify before reporting:** `npm run build` (or typecheck) passes; `npm test` passes (or the create test file in isolation if the full suite truncates the dev DB — see KEV-80); and a dry run of the scaffolder against a temp dir with a mocked/`file://` source produces a working tree + `.env.local`. Report `SUCCESS <summary of changes + any layout decisions>` or `FAIL <reason>`.
+
+### PR 2 — `feat/install-skill`
+
+> You are implementing PR 2 of `docs/plans/2026-08-16-npm-distribution-roadmap.md` (read it first for context). Work on branch `feat/install-skill` off `main`.
+>
+> **Goal:** create a guided-install agent skill that takes a brand-new user from nothing to a **live, reachable Vercel instance**, then hands off to the existing `build-variation-voter` skill.
+>
+> **Do:** create `.claude/skills/install-variation-voter/SKILL.md`, mirroring the structure, tone, and quality bar of `.claude/skills/build-variation-voter/SKILL.md` (read it first). The skill orchestrates:
+> 1. Run `npx create-variation-voter <dir>` (PR 1's scaffolder) and `npm install`.
+> 2. Provision a Neon Postgres DB — guide the dashboard steps, and use the Neon/Vercel CLI where available; capture `DATABASE_URL`.
+> 3. Deploy to Vercel via the `vercel` CLI (lean on the existing `vercel-cli` skill). Set all env vars, including `PUBLIC_BASE_URL` = the assigned Vercel URL. Note build-time `drizzle-kit migrate` runs automatically per `vercel.json`.
+> 4. **Verify** the deployed instance is reachable and the admin token works (`GET /api/admin/voters` returns 200).
+> 5. Write local config so the build skill's preflight passes — `VARIATION_VOTER_URL` (the deployed URL) + `VARIATION_VOTER_ADMIN_TOKEN`. Read `cli/config.ts` to match the exact env/file the CLI expects.
+> 6. End with an explicit handoff line: *"You're set up — now tell me to spin up a voter."*
+>
+> **Constraints:** this is a skill authoring task — no app/runtime code changes. Verify every file path, env var name, and command you reference actually exists in the repo (`cli/config.ts`, `cli/api-client.ts`, `vercel.json`, `docs/deploy.md`, `.env.example`) — do not invent flags. Include a preflight-checklist and a failure/troubleshooting section like the build skill has. Keep the deployed-URL-vs-localhost distinction explicit (the shareable link only works with `PUBLIC_BASE_URL` set to the deployed URL).
+>
+> **Verify before reporting:** re-read the finished SKILL.md and confirm every referenced path/command is real and the step order actually produces a reachable instance + valid local config. Report `SUCCESS <summary>` or `FAIL <reason>`.
+
+### PR 3 — `feat/wire-and-docs` (after PR 1 + PR 2 merge)
+
+> You are implementing PR 3 of `docs/plans/2026-08-16-npm-distribution-roadmap.md` (read it first). Work on branch `feat/wire-and-docs` off a `main` that already has PR 1 and PR 2 merged.
+>
+> **Goal:** make the install skill and the build skill connect cleanly, and update the docs to the single new path.
+>
+> **Do:**
+> 1. Confirm `build-variation-voter`'s preflight reads exactly the config `install-variation-voter` writes (`VARIATION_VOTER_URL`, `VARIATION_VOTER_ADMIN_TOKEN`); trace `cli/config.ts` + `cli/api-client.ts`. If they mismatch, fix the mismatch (prefer changing the newer install skill to match the established CLI contract).
+> 2. Confirm `shareUrl` uses the deployed `PUBLIC_BASE_URL` (`app/api/admin/voters/route.ts`) and document that the link is only externally shareable when it's set to the deployed URL.
+> 3. Update `README.md` and `docs/deploy.md`: one install path (`npx create-variation-voter` → install skill → build skill) and the workshop (local clone) vs. gallery (Vercel deploy) model.
+> 4. Add a short "known limitation" note about iframe isolation — app bundles are served same-origin (`allow-scripts allow-same-origin`); acceptable for trusted, agent-built content only (KEV-79).
+>
+> **Constraints:** no new features; wiring + docs only. Don't reopen KEV-79/KEV-80 — just document them.
+>
+> **Verify before reporting:** trace the full handoff (install writes config → build preflight reads it → publish prints a `PUBLIC_BASE_URL`-based link) and confirm no gap. Report `SUCCESS <summary>` or `FAIL <reason>`.
+
+---
+
 ## Out of scope for v1
 
 - Web UI to create/manage voters (decision 3).
