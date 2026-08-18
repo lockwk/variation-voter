@@ -1,0 +1,367 @@
+/* ---- the branded gradient card — same chrome as vibe-pick-2's `.branded`
+   (forked verbatim; see that file's header comment for the Figma source /
+   gradient-token rationale). PlaygroundShell's `.content` region already
+   centers + pads its children, so this only needs to own its own card
+   chrome — not a full-viewport page shell. */
+.branded {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(222.87deg, var(--c-accent-blue) 0%, var(--c-accent) 100%);
+  --vibe-stage-max: 600px;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  border-radius: var(--r-xl);
+  padding: var(--s-12) var(--s-8);
+  color: var(--c-text-on-dark);
+  gap: var(--s-6);
+}
+
+/* ---- "PICK YOUR VIBE" header ---- */
+.pickHeaderRow {
+  width: 100%;
+  max-width: var(--vibe-stage-max);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.pickHeader {
+  margin: 0;
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 0.8;
+  font-weight: 400;
+  letter-spacing: -0.1px;
+  text-transform: uppercase;
+  color: var(--c-text-on-dark);
+}
+
+/* ---- progress dots: one per question, filled through the current round;
+   hidden once the results screen is showing (see `showProgress` in TSX). ---- */
+.progressDots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.progressDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--c-text-on-dark);
+  opacity: 0.3;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.progressDot[data-active] {
+  opacity: 1;
+}
+
+/* ---- stage: fixed-size viewport for whichever round/results screen is
+   currently mounted. Unlike vibe-pick-2, this concept has no persistent
+   winner-grows-over-loser geometry — each round's pair (`.pairStage`) and
+   the final `.resultsScreen` are swapped via `AnimatePresence mode="wait"`
+   in TSX (slide-up cross-fade), so `.stage` only needs to be the sized,
+   `position: relative` anchor those absolutely-positioned children fill. */
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: var(--vibe-stage-max);
+  height: 360px;
+  margin: 0 auto;
+}
+
+/* ---- one round's pair — both `.slot`s + the OR badge live inside this
+   single wrapper so they translate/fade together as one unit under
+   `AnimatePresence` (keyed on `roundIndex` in TSX): pick a card -> pair
+   slides up + fades out -> next pair slides up from below + fades in.
+   `position: absolute; inset: 0` fills `.stage` (motion supplies the
+   animated `y`/`opacity` transform via `animate`/`exit`, not this CSS) and
+   becomes the positioned ancestor for the two `.slot`s + `.orBadge` below,
+   same role `.stage` used to play directly in vibe-pick-2. */
+.pairStage {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- one slot (top or bottom) within the current pair ----
+   The white rounded surface itself; `top`/`height`/`opacity` are animated
+   per-frame via motion (`animate={{...}}` in TSX, see `geomFor`/
+   `slotOpacityAnim`) for the hover ratio-shift (picking) and the brief
+   selected-state dim/shrink (selected) — this concept has no playing/
+   results phase INSIDE a slot (no winner-grows-to-full-card morph; the
+   whole pair exits together instead, see `.pairStage` above), so
+   border-radius here is a fixed resting value, never animated. */
+.slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  border-radius: var(--r-l);
+  background: var(--c-surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+
+/* ---- tile content layer: split white tile, gradient-clip label + photo ----
+   Absolutely fills its `.slot` — the only content layer a slot has in this
+   concept (no playback/results layers to cross-fade against, see `.slot`'s
+   comment above). */
+.tile {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border: none;
+  border-radius: inherit;
+  background: var(--c-surface);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    box-shadow var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+.tile:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--c-accent),
+    var(--shadow-2);
+}
+
+.tile:hover:not(:disabled) {
+  box-shadow: var(--shadow-2);
+}
+
+/* Loser tile dims the moment a pick is made (its own opacity fade is
+   motion-driven, in TSX — this just handles the desaturation, which the
+   existing `.tile` transition above already animates). */
+.tile[data-loser] .tileImage {
+  filter: saturate(0.5);
+}
+
+/* ---- left panel: white bg, gradient-clip label ---- */
+.tileText {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-6);
+  background: var(--c-surface);
+}
+
+.tileLabel {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-display-l);
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -1px;
+  text-transform: uppercase;
+  background: var(--grad-rc-45-v2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- right panel: full-bleed photo ---- */
+.tilePhoto {
+  position: relative;
+  z-index: 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Pinned to the tile box (inset:0), so the image edges ARE the tile edges at
+   every frame — it resizes in lockstep with the tile's animated height and can
+   never leave white space around itself. object-fit:cover keeps it filled; the
+   tile's constant width means the shrinking loser reveals rather than zooms. */
+.tileImage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: filter var(--duration-base) var(--ease-out);
+}
+
+.tileScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(213deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+/* White check-circle that pops in (spring scale 0->1, in TSX) once the tile
+   is chosen — pinned bottom-right of the winner's photo panel per Figma. */
+.checkBadge {
+  position: absolute;
+  right: var(--s-5);
+  bottom: var(--s-5);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--c-text-main);
+}
+
+/* "OR" badge: small purple -> blue gradient circle, positioned over the seam
+   between the two slots — lives inside `.pairStage` (not `.stage` directly)
+   so it rides the pair's slide-up/fade transition along with both slots
+   (see `.pairStage`'s comment above). */
+.orBadge {
+  position: absolute;
+  top: 50%;
+  left: 50px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(225deg, var(--c-accent) 0%, var(--c-accent-blue) 100%);
+  box-shadow: 0 8px 16px rgba(2, 29, 73, 0.2);
+  color: var(--c-text-on-dark);
+  font-family: var(--font);
+  font-size: var(--font-size-body-big);
+  font-weight: 700;
+  line-height: 0.85;
+  letter-spacing: -0.1px;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform: translate(0, -50%);
+}
+
+/* ---- results screen — swaps in for `.pairStage` (via `AnimatePresence`)
+   once the 5th pick commits: a white rounded surface over the branded
+   gradient, filling `.stage` exactly like `.pairStage` did, fading in pure
+   opacity (no slide) per the Figma reference (40005069-40879). ---- */
+.resultsScreen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-8) var(--s-8) 23px;
+  background: var(--c-surface);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
+  text-align: center;
+}
+
+/* ---- top/bottom content groups: "YOUR VIBE IS" + badges sit 32px from the
+   top of `.resultsScreen`; the CTA + "Start Over" sit 23px from the bottom
+   (see `.resultsScreen`'s `justify-content: space-between` + padding above).
+   Each group keeps its own internal `gap` now that the outer flex column no
+   longer supplies one. ---- */
+.resultsTop,
+.resultsBottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: var(--s-6);
+}
+
+/* "YOUR VIBE IS" — copies vibe-pick-2's old `.vibeSoFarLabel` rules, swapped
+   to navy (`--c-text-main`) since this sits on the white results surface
+   rather than inside a card next to `--c-text-weak` body copy. */
+.resultsLabel {
+  font-size: var(--font-size-caption);
+  line-height: var(--font-line-caption);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-text-main);
+}
+
+.resultsBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+}
+
+/* Motion wrapper around each `Badge` — hugs the badge's own size (rather than
+   stretching) so it stays a normal flex-wrap item inside `.resultsBadges`
+   while the stagger-in animation (opacity/y/scale, see `ResultsScreen` in
+   TSX) is applied to it. */
+.badgeItem {
+  display: inline-flex;
+}
+
+.resultsActions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+/* ---- responsive: down to ~360px ---- */
+@media (max-width: 400px) {
+  .branded {
+    padding: var(--s-6) var(--s-5);
+  }
+
+  .pickHeader {
+    font-size: 42px;
+  }
+
+  .stage {
+    height: 300px;
+  }
+
+  .tileText {
+    padding: var(--s-4);
+  }
+
+  .tileLabel {
+    font-size: 34px;
+  }
+
+  .resultsScreen {
+    padding: var(--s-8) var(--s-4) 23px;
+  }
+}
+
+/* ---- reduced motion disables the hover shadow transition entirely (still
+   changes state, just without the animated feel). ---- */
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .tileImage {
+    transition: none;
+  }
+
+  .progressDot {
+    transition: none;
+  }
+}

@@ -1,0 +1,79 @@
+.row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: var(--s-3);
+}
+
+.wrap {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.chip {
+  position: relative;
+  z-index: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-1);
+  height: 42px;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  color: var(--c-text-main);
+  white-space: nowrap;
+  /* no drop shadow in the default state */
+  transition: opacity 160ms ease-in-out;
+}
+
+.chipIcon {
+  flex: 0 0 auto;
+}
+
+/* pill surface + Gradients/45°/V3 stroke — sits ABOVE the glow, below the text */
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  background: linear-gradient(var(--c-surface), var(--c-surface)) padding-box,
+    var(--grad-45-v3) border-box;
+}
+
+/* gradient drop shadow (Gradients/RC/90°/H4) — hover only, BEHIND the pill */
+.chip::before {
+  content: '';
+  position: absolute;
+  inset: 4px 0 -4px 0;
+  z-index: -2;
+  border-radius: inherit;
+  background: var(--grad-rc-90-h4);
+  filter: blur(10px);
+  opacity: 0;
+  transition: opacity 160ms ease-in-out;
+}
+
+/* Hovering a chip dims the rest to 50% — scoped to :has(.chip:hover), not
+   :hover on the row itself, so moving off a chip but staying inside the row
+   (e.g. in the gap between wrapped rows) restores full opacity immediately
+   instead of leaving every chip stuck dimmed. */
+.row:has(.chip:hover) .chip {
+  opacity: 0.5;
+}
+.chip:hover {
+  opacity: 1;
+}
+/* The dim rule above (.row:has(.chip:hover) .chip) outweighs plain
+   .chip:hover on specificity alone, so the actually-hovered chip was getting
+   dimmed along with its siblings. This matches or beats that specificity so
+   the hovered chip itself always stays fully opaque. */
+.row:has(.chip:hover) .chip:hover {
+  opacity: 1;
+}
+.chip:hover::before {
+  opacity: 0.7;
+}

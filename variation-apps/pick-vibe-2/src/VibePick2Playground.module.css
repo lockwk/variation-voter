@@ -1,0 +1,512 @@
+/* ---- the branded gradient card — this concept's own root now that it owns
+   its flow directly instead of rendering through `VibeDuelHarness` (whose
+   `.page` this used to merge onto via a `className` prop; see this file's
+   git history / the pre-rework version for that shape). PlaygroundShell's
+   `.content` region already centers + pads its children (see
+   PlaygroundShell.module.css), so this only needs to own its own card
+   chrome — not a full-viewport page shell. */
+.branded {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Figma "Poll" frame (node 40005057:40354), background layer "Gradient Dark
+     Vertical/Dark Vertical 7": linear-gradient(222.87157724579097deg,
+     palette/accent/blue/base 0%, palette/accent/primary/base 100%) — blue ->
+     purple. No gradient token matches both the color order and this angle:
+     --grad-sidebar-brand is the same blue->purple family but at 180° with
+     slightly different hex stops; --grad-rc-45-v3/--grad-headline have the
+     right hexes but reversed order (purple->blue) and a different angle. One
+     -off angle, but the color stops themselves are still the real tokens
+     (--c-accent-blue / --c-accent), not hardcoded hex — same "no exact
+     gradient token" precedent as vibe-pick's own `.branded` comment. */
+  background: linear-gradient(222.87deg, var(--c-accent-blue) 0%, var(--c-accent) 100%);
+  --vibe-stage-max: 600px;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  border-radius: var(--r-xl);
+  /* Figma: px-32/py-64 on the Poll frame — exact matches for --s-8/--s-12. */
+  padding: var(--s-12) var(--s-8);
+  color: var(--c-text-on-dark);
+  /* Figma: 24px gap between the header and body -> --s-6 exactly. */
+  gap: var(--s-6);
+}
+
+/* ---- "PICK YOUR VIBE" header (replaces the default eyebrow + rail) ---- */
+.pickHeader {
+  width: 100%;
+  max-width: var(--vibe-stage-max);
+  margin: 0;
+  /* Figma: 24px gap between the header and body flex children -> --s-6,
+     handled by .branded's own `gap: var(--s-6)` on its flex column. */
+  text-align: left;
+  font-family: var(--font-display);
+  /* Figma: text-[56px] literal on the header run (distinct from the per-tile
+     label below, which binds to the real Font/Size/Display-M=48 variable) —
+     no --font-size-* token spans 56px (between --font-size-display-l/48 and
+     --font-size-display-xl/96), so this stays a literal like the header font-
+     size in vibe-pick's own .pickHeader. */
+  font-size: 56px;
+  /* Figma: leading-[0.8] (unitless multiplier), matching every display run in
+     this frame — see .tileLabel below. */
+  line-height: 0.8;
+  /* Figma: Font/Weight/Regular. Kapra only ships a Regular (400) @font-face
+     (see global.css) — matching that here (rather than vibe-pick's 700)
+     avoids the browser synthesizing a faux-bold weight that doesn't exist. */
+  font-weight: 400;
+  /* Figma: Font/Tracking/-1 (-0.1px). tracking isn't mirrored as a CSS var
+     (only color/spacing/radius/shadow/font-size are — see design-system.md),
+     so this is a literal, same convention as vibe-pick's own header. */
+  letter-spacing: -0.1px;
+  text-transform: uppercase;
+  color: var(--c-text-on-dark);
+}
+
+/* ---- stage: the persistent 2-slot absolute-positioned stack ----
+   Both `.slot`s live here permanently (they're never unmounted across the
+   flow — see VibePick2Playground's header comment). An earlier flex-column
+   version animated each slot's `flexGrow` so the two shared this box's fixed
+   height — but that meant the winner filling the column forced the loser's
+   flexGrow to 0, shrinking it to a thin line right when it should be fading
+   out. Now each `.slot` is `position: absolute` and animates its own `top`/
+   `height` (in TSX, via `geomFor`/`stackGeom`), so a winner can grow to fill
+   the whole stage while the loser HOLDS its last size underneath and just
+   fades — no shared box to fight over. `position: relative` here provides
+   the positioning context for both `.slot`s and anchors the "OR" badge.
+   Figma: h-[360px] on the body wrapper — literal, no layout token covers a
+   concept-specific stage height (same as vibe-pick's own .tiles). */
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: var(--vibe-stage-max);
+  height: 360px;
+  margin: 0 auto;
+}
+
+/* ---- one persistent slot (top or bottom) ----
+   The white rounded surface itself; `top`/`height`/`opacity`/`border-radius`
+   are all animated per-frame via motion (`animate={{...}}` in TSX, see
+   `geomFor`/`slotOpacityAnim`). `position: absolute` + `left/right: 0` (with
+   `top`/`height` supplied by motion) is what lets the winner grow to fill
+   the whole `.stage` OVER the loser, which holds its last size and just
+   fades — see `.stage`'s comment above for why the earlier flex-grow-sharing
+   version couldn't do this. `z-index` (plain `style`, not animated — see
+   renderSlot in TSX) stacks the winner above the loser once it starts
+   growing over it. `border-radius` starts at the tile radius (--r-l/12px)
+   and only the slot currently holding the winner content grows to the
+   full-card radius (--r-xl/24px) — see renderSlot's comment in TSX. Content
+   layers stack absolutely inside (see .tile/.playbackLayer/.resultsLayer
+   below) and cross-fade by opacity, independent of this slot-level opacity. */
+.slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  /* Figma: rounded-[12px] -> --r-l exactly (the resting tile radius; the
+     winner slot's own border-radius is animated up to --r-xl/24px in TSX). */
+  border-radius: var(--r-l);
+  background: var(--c-surface);
+  overflow: hidden;
+  /* Figma "Level 1" effect on Image Tile: 0px 4px 16px Alphadark/10 ->
+     --shadow-1, an exact match. box-shadow still renders outside
+     overflow:hidden (it's drawn on the box, not clipped as descendant
+     content), so this stays visible through every phase. */
+  box-shadow: var(--shadow-1);
+}
+
+/* ---- tile content layer: split white tile, gradient-clip label + photo ----
+   Absolutely fills its `.slot` (stacked with .playbackLayer/.resultsLayer
+   below, cross-faded by opacity — never remounted, see TSX). */
+.tile {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Figma "Image Tile" / "Poll" frame: the photo's visible half spans
+     x=269..536 of a 536-wide tile — a 50/50 text:photo split, not 2:1. Using
+     an even 1fr/1fr ratio keeps that proportion responsive to this card's own
+     (different) max-width. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border: none;
+  border-radius: inherit;
+  background: var(--c-surface);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    box-shadow var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+.tile:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--c-accent),
+    var(--shadow-2);
+}
+
+/* The Figma cards are plain white + shadow (no colorful ring) — vibe-pick's
+   gradient-ring hover border (TileNew2-style masked ::after) doesn't apply
+   here. A --shadow-2 elevation escalation stands in as the hover affordance,
+   only while the tile is still interactive (`disabled` covers every
+   post-pick phase) — same elevation-escalation role --shadow-2 plays for
+   Tile's own Hover state per design-system.md. */
+.tile:hover:not(:disabled) {
+  box-shadow: var(--shadow-2);
+}
+
+/* Loser tile dims + nudges down in scale the moment a pick is made (its own
+   opacity fade is motion-driven, in TSX — this just handles the scale/
+   desaturation, which the existing `.tile` transition above already
+   animates). */
+.tile[data-loser] {
+  transform: scale(0.98);
+}
+
+.tile[data-loser] .tilePhoto {
+  filter: saturate(0.5);
+}
+
+/* ---- left panel: white bg, gradient-clip label ---- */
+.tileText {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-1);
+  min-width: 0;
+  /* Figma "Text" node: p-[24px] -> --s-6 exactly (vibe-pick's own .tile used
+     --s-5/20px for the same role; this frame specifies 24px). */
+  padding: var(--s-6);
+  background: var(--c-surface);
+}
+
+/* option label — display face, uppercase, purple -> magenta gradient-clip
+   fill (Figma binds Font/Size/Display-M=48 + the two named accent color
+   variables here; --grad-rc-45-v2 is already `linear-gradient(45deg,
+   --c-accent 0%, --c-accent-pink 100%)`, an exact match on both stops and
+   angle — reused via the same background-clip:text technique already used
+   by ItineraryAbout/ItineraryIncluded/etc, see design-system.md's gradient
+   guidance). */
+.tileLabel {
+  margin: 0;
+  font-family: var(--font-display);
+  /* Figma: Font/Size/Display-M = 48px -> --font-size-display-l, an exact
+     match. */
+  font-size: var(--font-size-display-l);
+  /* Figma specifies leading-[0.8] (unitless), same convention as .pickHeader —
+     but raised to 1 here: sub-1 leading combined with -webkit-background-
+     clip:text makes the line box shorter than the capital glyphs, which clips
+     the TOP of the letters in-browser. 1 is the smallest value that renders
+     the full glyph height with no top clipping while keeping the tight
+     uppercase display look. */
+  line-height: 1;
+  /* Figma: Font/Weight/Regular (see .pickHeader's comment on Kapra's single
+     registered weight). */
+  font-weight: 400;
+  /* Figma: Font/Tracking/-4 (-1px) — no --tracking-* CSS var exists (see
+     .pickHeader's comment), so literal. */
+  letter-spacing: -1px;
+  text-transform: uppercase;
+  background: var(--grad-rc-45-v2);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- right panel: full-bleed photo ----
+   The photo is painted as a `background-image` on this div (set inline in
+   TSX) instead of a separate `<img>` element. A separate `<img>` gets
+   composited on its OWN layer, which desyncs from the slot's animating
+   `height` by a frame/subpixel while a grow/shrink is in flight — revealing
+   a thin white seam of the slot's `--c-surface` at the moving edges.
+   Painting the photo as part of THIS box's own background means it
+   rasterizes together with the box on every frame, so there's no separate
+   layer to desync and no seam. `background-size: cover` +
+   `background-position: center` is the background-image equivalent of the
+   old `<img>`'s `object-fit: cover` — it tracks the panel's real size every
+   frame with nothing to recompute a transform for (same reasoning as the
+   old inset:0/object-fit:cover choice this replaces). */
+.tilePhoto {
+  position: relative;
+  z-index: 0;
+  min-width: 0;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: filter var(--duration-base) var(--ease-out);
+}
+
+/* Figma "Image": a subtle diagonal black wash for depth (~213°, 0% -> 20%
+   opacity black) over the photo. No longer load-bearing for text legibility
+   (the label now lives on the white left panel), but kept for fidelity to
+   the mock's own photo treatment. Not the shared --c-scrim token (that's a
+   navy modal-backdrop dim at a different hue/opacity/intent) — a plain black
+   wash at Figma's own stops, same "literal when no token matches" precedent
+   as vibe-pick's own .tileScrim. */
+.tileScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(213deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+/* White check-circle that pops in (spring scale 0->1, in TSX) once the tile
+   is chosen — pinned bottom-right of the winner's photo panel per Figma. */
+.checkBadge {
+  position: absolute;
+  right: var(--s-5);
+  bottom: var(--s-5);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--c-text-main);
+}
+
+/* "OR" badge: small purple -> blue gradient circle, positioned over the seam
+   between the two slots (Figma "OR" frame: x=50 within the tiles column, i.e.
+   the badge's LEFT EDGE sits ~50px from the left edge of .stage — a fixed px
+   offset, not a center-relative one, so left is set directly and only the
+   vertical centering on the seam comes from the transform). Visible only
+   through `picking` (tracking the live seam via `top`); fades out fast the
+   moment a pick is made instead of riding the seam as the winner grows — its
+   `top` then just holds its last value (see the TSX). Figma's gradient uses
+   the same two color stops as
+   --grad-rc-45-v4 (accent -> accent-blue) but rotated to 225° for this
+   circular badge instead of that token's 211° — angle kept as a one-off via
+   the same color vars for exact fidelity on a small, highly-visible badge. */
+.orBadge {
+  position: absolute;
+  top: 50%;
+  left: 50px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Figma: size-[48px] — no spacing token lands on 48 (--s-8/32 -> --s-12/64). */
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(225deg, var(--c-accent) 0%, var(--c-accent-blue) 100%);
+  /* Figma badge-specific drop-shadow: 0px 8px 16px Alphadark/20 — same color/
+     offset as --shadow-2 but a smaller 16px blur (--shadow-2's is 32px), so
+     kept as a literal rather than reusing that token verbatim. */
+  box-shadow: 0 8px 16px rgba(2, 29, 73, 0.2);
+  color: var(--c-text-on-dark);
+  font-family: var(--font);
+  /* Figma: Font/Size/Body-Big = 20px -> --font-size-body-big, exact match. */
+  font-size: var(--font-size-body-big);
+  /* Figma: Proxima Nova Bold. */
+  font-weight: 700;
+  /* Figma: leading-[0.85] (unitless). */
+  line-height: 0.85;
+  /* Figma: Font/Tracking/-1 (-0.1px) — literal, see .pickHeader's comment. */
+  letter-spacing: -0.1px;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform: translate(0, -50%);
+}
+
+/* ---- Playback / Results content layers — stacked absolutely inside the
+   winner slot alongside `.tile` above and cross-faded by opacity (see TSX).
+   Same 24px padding the tiles used horizontally; `justify-content:
+   space-between` pins the top/bottom rows to the slot's own edges (its --s-6
+   padding) with the recap centered between them — Results' "24px from top/
+   bottom" annotations and Playback's top-pinned question count both rely on
+   this. `inert` (set in TSX) keeps their buttons out of the tab order while
+   hidden; `pointer-events: none` below stops stray clicks landing on a
+   layer mid-fade-out (Sidebar.module.css's own `.navItem` label uses the
+   same off-state pointer-events:none convention). ---- */
+.playbackLayer,
+.resultsLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  /* Figma: 24px on all sides -> --s-6 exactly. */
+  padding: var(--s-6);
+  text-align: center;
+  pointer-events: none;
+}
+
+.playbackLayer[aria-hidden='false'],
+.resultsLayer[aria-hidden='false'] {
+  pointer-events: auto;
+}
+
+/* Title -> subline spacing: 4px per annotation, distinct from the layer's
+   own --s-5 gap below (which separates this headline block from the
+   timer/vibe-so-far below it). */
+.cardHeadline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1); /* 4px */
+}
+
+.cardTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  /* Figma calls for 32px here — no --font-size-* step lands on 32 (between
+     --font-size-title/24 and --font-size-display/40), so this is a literal,
+     same "no exact token" convention as .pickHeader/.tileLabel above. */
+  font-size: 32px;
+  line-height: 1.05;
+  font-weight: 700;
+  color: var(--c-text-main);
+  text-transform: uppercase;
+}
+
+.cardSubtitle {
+  margin: 0;
+  /* Figma: Body/16, 22px line — exact match for --font-size-body/--font-line-body. */
+  font-size: var(--font-size-body);
+  line-height: var(--font-line-body);
+  color: var(--c-text-weak);
+}
+
+/* Countdown bar: full-bleed along the slot's top edge (Figma Playback node
+   40005058:40589 — a 4px rect at x=0 y=0 spanning the card width). It's
+   absolutely positioned against `.playbackLayer` (itself `inset: 0` on the
+   slot), so it ignores that layer's own --s-6 padding and sits flush at the
+   true top edge; `.slot`'s overflow:hidden clips its ends to the rounded top
+   corners. No track — the depleting fill sits directly on the white slot. */
+.timerBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 1;
+}
+
+.timerFill {
+  height: 100%;
+  background: var(--c-accent-shade);
+}
+
+/* Playback's centered vibe block — sits below the top-pinned question count,
+   vertically centered within the layer's remaining height (the layer's own
+   `justify-content: space-between` gives it that room to center in). */
+.playbackBody {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-5);
+  width: 100%;
+}
+
+.questionCount {
+  font-size: var(--font-size-caption);
+  line-height: var(--font-line-caption);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-text-weak);
+}
+
+/* ---- "your vibe so far" chip recap (Playback + Results) ---- */
+.vibeSoFar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+}
+
+.vibeSoFarLabel {
+  font-size: var(--font-size-caption);
+  line-height: var(--font-line-caption);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-text-weak);
+}
+
+.vibeChips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+}
+
+/* ---- Results-only chrome ---- */
+.resultsTop {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.resultsBody {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-5);
+  width: 100%;
+}
+
+.resultsFooter {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+/* ---- responsive: down to ~360px ---- */
+@media (max-width: 400px) {
+  .branded {
+    padding: var(--s-6) var(--s-5);
+  }
+
+  .pickHeader {
+    font-size: 42px;
+  }
+
+  .stage {
+    height: 300px;
+  }
+
+  .tileText {
+    padding: var(--s-4);
+  }
+
+  .tileLabel {
+    font-size: 34px;
+  }
+
+  .playbackLayer,
+  .resultsLayer {
+    padding: var(--s-6) var(--s-4);
+  }
+}
+
+/* ---- reduced motion disables the hover shadow transition entirely (still
+   changes state, just without the animated feel). ---- */
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .tilePhoto {
+    transition: none;
+  }
+}

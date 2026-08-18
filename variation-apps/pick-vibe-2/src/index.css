@@ -1,0 +1,7 @@
+/* Template leftover, trimmed to the bare minimum so it doesn't fight the
+   concept's own layout/reset (see global.css, which already sets box-sizing,
+   html/body/#root height, and centers the stage via #root). */
+html,
+body {
+  margin: 0;
+}

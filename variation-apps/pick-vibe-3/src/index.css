@@ -1,0 +1,9 @@
+/* Template leftover, intentionally minimal: `global.css` (imported first in
+   main.tsx) owns the full reset, design tokens, and the `body`/`#root`
+   background + centering for the concept's own ~480px stage. This file just
+   guards against any un-reset browser default margin before global.css
+   loads. */
+html,
+body {
+  margin: 0;
+}

@@ -1,0 +1,27 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Figma RC_Badge: 12px horizontal / 4px vertical padding, label-semi text. */
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-xl);
+  font-family: var(--font);
+  font-size: var(--font-size-label);
+  line-height: var(--font-line-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.confirmed {
+  background: var(--c-badge-confirmed-bg);
+  color: var(--c-badge-confirmed-text);
+}
+
+/* informational and brand share one visual treatment (solid accent fill, on-dark text) —
+   two semantically distinct variant names, same two-names-one-hex pattern used elsewhere
+   in this design system (see design-system.md). */
+.informational,
+.brand {
+  background: var(--c-accent);
+  color: var(--c-text-on-dark);
+}

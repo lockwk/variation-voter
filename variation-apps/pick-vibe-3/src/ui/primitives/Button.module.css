@@ -1,0 +1,167 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  font-family: var(--font);
+  font-size: var(--font-size-body);
+  line-height: var(--font-line-body);
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  white-space: nowrap;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+}
+
+.icon {
+  flex: 0 0 auto;
+}
+
+/* Primary */
+.primary {
+  height: 40px;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-pill);
+  background: var(--c-action);
+  color: var(--c-text-on-dark);
+}
+.primary:hover,
+.primary.isForceHover,
+.primary:focus-visible,
+.primary.isForceFocused {
+  background: var(--c-btn-primary-hover);
+}
+.primary:active,
+.primary.isForcePressed {
+  background: var(--c-btn-primary-active);
+}
+.primary:focus-visible,
+.primary.isForceFocused {
+  outline: 2px solid var(--c-btn-primary-hover);
+  outline-offset: 2px;
+}
+.primary:disabled {
+  background: none;
+  border-color: var(--c-btn-disabled);
+  color: var(--c-text-disabled);
+}
+
+/* Secondary */
+.secondary {
+  height: 40px;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  border-color: var(--c-divider);
+  color: var(--c-text-weak);
+}
+.secondary:hover,
+.secondary.isForceHover,
+.secondary:focus-visible,
+.secondary.isForceFocused {
+  background: var(--c-btn-secondary-hover);
+}
+.secondary:active,
+.secondary.isForcePressed {
+  background: var(--c-btn-secondary-active);
+  border-color: var(--c-btn-secondary-active);
+}
+.secondary:focus-visible,
+.secondary.isForceFocused {
+  outline: 2px solid var(--c-btn-focus-secondary);
+  outline-offset: 2px;
+}
+.secondary:disabled {
+  background: var(--c-surface);
+  border-color: var(--c-btn-disabled);
+  color: var(--c-text-disabled);
+}
+
+/* Tertiary — inline text link, no fixed height, arrow icon instead of plus */
+.tertiary {
+  color: var(--c-action);
+}
+/* Declared before :hover/:active/:disabled so those (same specificity) still win the
+   cascade tie-break over a visited link — visited only changes the *resting* color. */
+.tertiary.visited {
+  color: var(--c-accent-violet);
+}
+.tertiary:hover,
+.tertiary.isForceHover {
+  color: var(--c-btn-primary-hover);
+}
+.tertiary:active,
+.tertiary.isForcePressed {
+  color: var(--c-btn-primary-active);
+}
+.tertiary:disabled {
+  color: var(--c-btn-disabled);
+}
+/* No custom focus ring for Tertiary in the source design — browser default applies. */
+
+/* Booking — gold CTA. No icon slot in the design. */
+.booking {
+  height: 40px;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-pill);
+  background-color: var(--c-booking);
+  color: var(--c-booking-text);
+}
+.booking:hover,
+.booking.isForceHover,
+.booking:focus-visible,
+.booking.isForceFocused {
+  background-image: linear-gradient(var(--c-booking-hover-overlay), var(--c-booking-hover-overlay));
+}
+.booking:active,
+.booking.isForcePressed {
+  background-image: none;
+  background-color: var(--c-booking-active);
+}
+.booking:focus-visible,
+.booking.isForceFocused {
+  outline: 2px solid var(--c-btn-focus-booking);
+  outline-offset: 2px;
+}
+.booking:disabled {
+  background-image: none;
+  background-color: var(--c-btn-disabled);
+  color: var(--c-text-disabled);
+}
+
+/* Delete — destructive action. No icon slot in the design. */
+.delete {
+  height: 40px;
+  padding: 0 var(--s-6);
+  border-radius: var(--r-pill);
+  background-color: var(--c-error);
+  color: var(--c-text-on-dark);
+}
+.delete:hover,
+.delete.isForceHover,
+.delete:focus-visible,
+.delete.isForceFocused {
+  background-image: linear-gradient(var(--c-error-hover-overlay), var(--c-error-hover-overlay));
+}
+.delete:active,
+.delete.isForcePressed {
+  background-image: none;
+  background-color: var(--c-error-active);
+}
+.delete:focus-visible,
+.delete.isForceFocused {
+  outline: 2px solid var(--c-btn-focus-error);
+  outline-offset: 2px;
+}
+.delete:disabled {
+  background-image: none;
+  background-color: var(--c-btn-disabled);
+  color: var(--c-text-disabled);
+}

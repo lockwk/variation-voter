@@ -1,0 +1,341 @@
+/* ============================================================
+   Fonts — Proxima Nova (licensed OTFs in /public/fonts)
+   ============================================================ */
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('./assets/fonts/ProximaNova-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('./assets/fonts/ProximaNova-Semibold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('./assets/fonts/ProximaNova-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Kapra';
+  src: url('./assets/fonts/Kapra-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================
+   Design tokens as CSS custom properties (mirror of tokens.ts)
+   ============================================================ */
+:root {
+  /* color */
+  --c-text-main: #021d49;
+  --c-text-weak: #4a4a4a;
+  --c-text-disabled: #8c9ab1;
+  --c-text-on-dark: #ffffff;
+  --c-action: #005edc;
+  /* Icon/Light/Unique/Favourite — fixed brand pink for the favorite/heart icon, independent of selected state */
+  --c-icon-favorite: #ff0db2;
+  /* Icon/Light/General/Primary — primary icon color on light/hover surfaces */
+  --c-icon-primary: #021d49;
+  /* recolors an <img>-based icon asset to --c-icon-primary regardless of its
+     source color — filters can't reference a CSS color var directly, so this
+     is generated once for that exact hex and reused wherever an icon needs
+     this hover treatment */
+  --filter-icon-primary: brightness(0) saturate(100%) invert(7%) sepia(30%) saturate(5765%) hue-rotate(206deg) brightness(99%) contrast(101%);
+  /* Icon/Light/General/Brand — confirmed via Figma variable lookup, same hex as
+     --c-action/--c-brand but a distinct semantic role (icon vs. action color) */
+  --c-icon-brand: #005edc;
+  /* Buttons/Surface/Light/Secondary/Hover — faint blue tint on secondary buttons */
+  --c-btn-secondary-hover: rgba(0, 86, 202, 0.05);
+  /* Buttons/Surface/Light/Secondary/Pressed — same blue tint family, higher opacity */
+  --c-btn-secondary-active: rgba(0, 86, 202, 0.24);
+  /* Buttons/Surface/Dark/Secondary/Active — dark-surface counterpart of --c-btn-secondary-active.
+     No longer consumed by the Sidebar (its active pill now uses --c-alpha-dark-20); kept as a
+     Figma-backed token for future dark-surface active states. */
+  --c-btn-secondary-active-on-dark: #c7d5f9;
+  /* Buttons/Surface/Light/Primary/Hover */
+  --c-btn-primary-hover: #053b81;
+  /* Buttons/Surface/Light/Primary/Pressed */
+  --c-btn-primary-active: #021d49;
+  /* Buttons/Surface/Disabled — shared neutral fill/border for disabled buttons (all variants) */
+  --c-btn-disabled: #d7dee9;
+  /* Buttons/Focus/Secondary — 2px focus-ring stroke (Primary reuses --c-btn-primary-hover; Tertiary has none) */
+  --c-btn-focus-secondary: #b8c6d9;
+  /* Buttons/Surface/Light/Booking/Default — gold CTA, reserved for the Button "Booking" variant */
+  --c-booking: #fdbb11;
+  /* Buttons/Surface/Light/Booking/Hover+Focused — 8%-opacity dark overlay stacked over --c-booking */
+  --c-booking-hover-overlay: rgba(130, 94, 0, 0.08);
+  /* Buttons/Surface/Light/Booking/Pressed — flat, distinct from hover */
+  --c-booking-active: #ff8000;
+  /* Buttons/Text/Booking — dark navy label/icon color on the gold surface */
+  --c-booking-text: #021d49;
+  /* Buttons/Focus/Booking */
+  --c-btn-focus-booking: #e9ac0e;
+  /* Buttons/Surface/Light/Delete/Default — reserved for the Button "Delete" variant (destructive actions) */
+  --c-error: #e62027;
+  /* Buttons/Surface/Light/Delete/Hover+Focused — 8%-opacity dark overlay stacked over --c-error */
+  --c-error-hover-overlay: rgba(168, 21, 26, 0.08);
+  /* Buttons/Surface/Light/Delete/Pressed — flat, distinct from hover */
+  --c-error-active: #a8151a;
+  /* Buttons/Focus/Delete */
+  --c-btn-focus-error: #c11b21;
+  /* Error/Weaker — light pink wash for hover/focus on a white-bg destructive row
+     (e.g. ActionSheetItem's Delete kind). Distinct from --c-error-hover-overlay, which is a
+     dark overlay meant to stack over an already-red bg (the Button Delete variant's own hover). */
+  --c-error-subtle: #fde8e9;
+  /* Text Field/Stroke/Light/Border/Success + Success/base — success state (border + message text) */
+  --c-success: #05a56b;
+  /* No interactive spec exists for this state (not a button) — inferred as the same
+     8%-opacity-dark-overlay proportion as --c-error-hover-overlay, for future hover/focus use. */
+  --c-success-hover-overlay: rgba(4, 73, 49, 0.08);
+  /* Inferred flat darker shade, same proportion as --c-error-active, for future pressed/focus use. */
+  --c-success-active: #037a51;
+  --c-accent: #8833ff;
+  --c-accent-shade: #4c0aae;
+  /* Surface/Dark/Background/Subtle — inline Notification card background, paired with
+     --c-accent-shade as its border. Distinct from --c-lavender (hover surface for list rows). */
+  --c-accent-subtle: #f3eef9;
+  --c-accent-blue: #0080ff;
+  --c-accent-bright: #00d5ff;
+  --c-accent-violet: #b580ff;
+  /* palette/accent/secondary/shade — pink stop for the itinerary sheet's section
+     sub-header gradient (Gradients/45°/V2). No named Figma gradient style backs this
+     pair (unlike v1/v3/v4) — just the two bound color variables. */
+  --c-accent-pink: #d60091;
+  /* Accents/RC/Orange/Base + Accents/RC/Yellow/Shade — the itinerary sheet's
+     "About this Cruise" callout border gradient (Gradients/RC/45°/V1) */
+  --c-accent-orange: #ff6900;
+  --c-accent-yellow: #ffea00;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0f2f6; /* subtle neutral fill (user bubble, calendar cells) */
+  --c-lavender: #e7d8fd;
+  /* Tag/Surface/Secondary — solid pale-blue pill bg for user-added preferences. No existing
+     blue token matches: --c-btn-secondary-hover/-active are translucent overlays
+     (rgba(0,86,202,...)), not this solid fill.
+     ORPHANED (unused): the PreferencePill redesign moved the user-vs-agent signal off the
+     card background, so this token has no remaining consumer. Kept for now rather than
+     removed — revisit if a future pill/tag variant needs a solid pale-blue fill again. */
+  --c-tag-user: #cce6ff;
+  --c-brand: #005edc;
+  --c-divider: #dbdbdb;
+  --c-stroke-strong: #8833ff;
+  --c-divider-on-dark: rgba(255, 255, 255, 0.5);
+  /* Sidebar's hover fill for primary nav items (New Chat/For You/Chats) and Recent Chats
+     rows (RC_Nav Panel). Now the translucent-navy --c-alpha-dark-20 — the same fill the
+     active pill, profile pill, and avatar circle use — replacing the old opaque hot-pink
+     #ff57eb. Kept as a named alias so consumers point at one variable; text/icons stay
+     white on it (no --filter-icon-primary recolor). */
+  --c-nav-hover-brand: var(--c-alpha-dark-20);
+  /* Surface/Dark/Nav/Kebab-Hover — light overlay for a Recent Chats row's kebab hover,
+     stacked over --c-nav-hover-brand. A white-based tint so it stays legible as a
+     "layer a highlight on top" effect over the (now translucent-navy) row fill. */
+  --c-nav-kebab-hover-on-brand: rgba(255, 255, 255, 0.2);
+  --c-canvas: #ffffff;
+  --c-surface-bg: #f8f8fa;
+  /* Text/Dark/General/Brand — weak text on dark/gradient surfaces (Tile Active state).
+     Numerically equal to --c-btn-disabled but a distinct semantic role — same
+     two-names-one-hex pattern as --c-action/--c-brand. */
+  --c-text-on-dark-weak: #d7dee9;
+  /* Badge/Surface/Confirmed + Badge/Text/Confirmed */
+  --c-badge-confirmed-bg: #b2e3d1;
+  --c-badge-confirmed-text: #045c3c;
+  /* Pagination/Surface/Main — dark-theme pagination pill background (Filled type) */
+  --c-pagination-surface-main: rgba(2, 29, 73, 0.75);
+  /* Pagination/Surface/Secondary — light-theme pagination pill background (Filled type) */
+  --c-pagination-surface-secondary: rgba(255, 255, 255, 0.75);
+  /* Pagination arrow-button hover tint on the Light theme (dark-tinted) */
+  --c-pagination-hover-light: rgba(2, 29, 73, 0.08);
+  /* Modal backdrop dim. Inferred from the navy shadow/text-main color family — no explicit
+     Figma spec exists for the scrim itself. */
+  --c-scrim: rgba(2, 29, 73, 0.45);
+  /* Text/Light/General/Disabled (Figma) — navy at 35% alpha. Muted meta text such as
+     TileNew2's review count. Distinct from --c-text-disabled (#8c9ab1, opaque). */
+  --c-text-subtle: rgba(2, 29, 73, 0.35);
+  /* Text/Light/General/Disabled (Figma) — warm-gray at 75% alpha. Mirrors the same Figma
+     variable name as --c-text-subtle above, but is NOT the same value: --c-text-subtle was
+     bound to navy rgba(2,29,73,0.35) for TileNew2 and is left unchanged (other components
+     depend on it) — this mismatch is flagged here for a future cleanup, not resolved by this
+     token. Use --c-text-meta for muted meta labels (PreferencePill's "AI"/"Saved by
+     you"/"Edited" tags, PreferencesModal's helper text). */
+  --c-text-meta: rgba(74, 74, 74, 0.75);
+  /* Alphadark/10 + Alphadark/20 (Figma) — translucent-navy fills from the RC_Nav Panel
+     refresh. --c-alpha-dark-20 is the shared surface for the Sidebar's nav hover, active
+     pill, profile pill, and avatar circle; --c-alpha-dark-10 is the elevation tint
+     (--shadow-1 already uses this exact value). They stack (0.2 over 0.2 → visibly darker)
+     where the avatar circle sits on the profile pill. */
+  --c-alpha-dark-10: rgba(2, 29, 73, 0.1);
+  --c-alpha-dark-20: rgba(2, 29, 73, 0.2);
+
+  /* typography */
+  --font: 'Proxima Nova', 'Inter', system-ui, sans-serif;
+  --font-display: 'Kapra', 'Proxima Nova', 'Inter', system-ui, sans-serif;
+  /* type scale — size / line-height (px), mirrors font.* in tokens.ts */
+  --font-size-caption: 12px;
+  --font-line-caption: 16px;
+  --font-size-label: 14px;
+  --font-line-label: 18px;
+  --font-size-body: 16px;
+  --font-line-body: 22px;
+  --font-size-body-big: 20px;
+  --font-line-body-big: 24px;
+  /* RC/Title-Big — TileNew2's card title. No prior 24px step existed on the scale. */
+  --font-size-title: 24px;
+  --font-line-title: 26px;
+  --font-size-display: 40px;
+  --font-line-display: 44px;
+  /* RC/Display L (Kapra) — sheet title lockups (e.g. the itinerary side-sheet hero) */
+  --font-size-display-l: 48px;
+  --font-line-display-l: 40px;
+  /* RC/Display XL (Kapra) — used by the landing headline */
+  --font-size-display-xl: 96px;
+  --font-line-display-xl: 55px;
+
+  /* brand gradients (CoCaptain DS) */
+  /* RC/45°/V1 — yellow/Shade -> orange/Base (itinerary sheet's "About this Cruise" border) */
+  --grad-rc-45-v1: linear-gradient(45deg, var(--c-accent-yellow) 0%, var(--c-accent-orange) 100%);
+  /* RC/45°/V2 — primary -> secondary/shade (purple -> pink). No named Figma gradient
+     style exists for this pair; used as the itinerary sheet's section sub-header text
+     fill (ItineraryAbout/ItineraryIncluded/ItineraryDayList/ItineraryCarousel titles). */
+  --grad-rc-45-v2: linear-gradient(45deg, var(--c-accent) 0%, var(--c-accent-pink) 100%);
+  /* RC/45°/V3 — primary -> blue */
+  --grad-rc-45-v3: linear-gradient(45deg, var(--c-accent) 0%, var(--c-accent-blue) 100%);
+  /* 45°/V3 — brights violet-tone-1 -> blue-tone-1 (inferred) */
+  --grad-45-v3: linear-gradient(45deg, var(--c-accent-violet) 0%, var(--c-accent-bright) 100%);
+  /* landing headline — RC/45°/V3 stops at ~188° per comp */
+  --grad-headline: linear-gradient(188deg, var(--c-accent) 0%, var(--c-accent-blue) 100%);
+  /* New Chat landing headline ("Where to today?") — pink -> primary, 90° per the Chat
+     Canvas comp (Figma layer "Test Gradient Purple"). Deliberately distinct from
+     --grad-headline above: that token is also reused by LoginPage/StatSpotlight's
+     blue->violet backdrop washes, which this comp doesn't touch. */
+  --grad-landing-headline: linear-gradient(90deg, var(--c-accent-pink) 0%, var(--c-accent) 100%);
+  /* RC/45°/V4 — pressed/toggle card surface */
+  --grad-rc-45-v4: linear-gradient(211deg, var(--c-accent) 0%, var(--c-accent-blue) 100%);
+  /* RC/90°/H4 — chip hover glow (approximated; exact stops TBC) */
+  --grad-rc-90-h4: linear-gradient(90deg, var(--c-accent) 0%, var(--c-accent-blue) 100%);
+  /* Gradients/Global Surfaces/Sheet Default — ModalCore's gradient surface */
+  --grad-sheet-default: linear-gradient(180deg, #ffffff 0%, var(--c-surface-bg) 100%);
+
+  /* TileNew2's 6-color randomized border-ring palette, straight vertical (180deg) angle for
+     the whole-card ring (see the tokens.ts comment). */
+  --grad-tile-new-2-pink-purple: linear-gradient(180deg, #ff00b6 0%, #992afc 100%);
+  --grad-tile-new-2-cyan-purple: linear-gradient(180deg, #00d7ff 0%, #912dff 100%);
+  --grad-tile-new-2-cyan-green: linear-gradient(180deg, #00d9ff 0%, #00ff00 100%);
+  --grad-tile-new-2-pink-yellow: linear-gradient(180deg, #ff00b5 0%, #ffe800 100%);
+  --grad-tile-new-2-yellow-orange: linear-gradient(180deg, #ffe800 0%, #ff5b00 100%);
+  --grad-tile-new-2-blue-pink: linear-gradient(180deg, #0082ff 0%, #ff5aec 100%);
+
+  /* spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 64px;
+  --s-14: 80px;
+
+  /* radius */
+  --r-s: 4px;
+  --r-m: 8px;
+  --r-l: 12px;
+  --r-xl: 24px;
+  /* side-sheet corner radius — sits above the rest of the scale on purpose;
+     kept as its own token per design-system.md so it has one source of truth
+     now that a second consumer (the sheet's slide-in clip wrapper) needs it */
+  --r-panel: 40px;
+  --r-pill: 250px;
+
+  /* shadow */
+  --shadow-1: 0 4px 16px rgba(2, 29, 73, 0.1);
+  /* Level 2 — Tile's Hover-state elevation escalation */
+  --shadow-2: 0 8px 32px rgba(2, 29, 73, 0.2);
+  /* Level 3 — TileNew2's hover/select elevation (larger, softer than Level 2) */
+  --shadow-3: 0 16px 64px rgba(2, 29, 73, 0.2);
+
+  /* RC_Nav Panel_B — Sidebar's solid brand gradient, identical in collapsed and expanded
+     states (no photo layer behind it anymore). */
+  --grad-sidebar-brand: linear-gradient(180deg, #0082ff 0%, #932cff 100%);
+
+  /* motion */
+  --duration-instant: 120ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-standard: ease-in-out;
+  --ease-out: ease-out;
+
+  /* layout */
+  --w-sidebar: 240px;
+  --w-rail: 50px;
+  --w-panel: 585px;
+  --w-content: 710px;
+  --w-card: 632px;
+  --w-input: 750px;
+  --w-notification: 358px;
+}
+
+/* ============================================================
+   Reset / base
+   ============================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--c-text-main);
+  /* neutral frame around the fixed 1440×1024 canvas */
+  background: #e9e9ec;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+ul {
+  list-style: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* center the fixed prototype frame in the viewport */
+#root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  min-height: 100%;
+}
