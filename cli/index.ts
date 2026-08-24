@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { config } from "dotenv";
+config({ path: ".env.local" });
+
 import { Command } from "commander";
 import { zipSync } from "fflate";
 import {
@@ -69,6 +72,10 @@ program
 
 program.command("list").action(async () => {
   const result = await listVotersRequest();
+  if (result.voters.length === 0) {
+    console.log("No voters yet.");
+    return;
+  }
   for (const voter of result.voters) {
     console.log(`${voter.id}  ${voter.title}  [${voter.status}]  expires ${voter.expiresAt}`);
   }

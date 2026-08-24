@@ -48,9 +48,11 @@ For each brief, scaffold first (cheap, sequential is fine), then build in parall
 node pipeline/scaffold-variation.mjs <slug> --run <runId>
 ```
 
-This copies `variation-apps/_template/` (deps pre-installed) into `.variations/<runId>/<slug>/`
-and prints the scaffold path and the dist path it will produce (`<scaffold path>/dist`). Do this
-for all N briefs before dispatching any subagents.
+This copies `variation-apps/_template/` into `.variations/<runId>/<slug>/` and installs the
+template's dependencies on first use, falling back to a plain `npm install` in the scaffold if
+`node_modules` isn't already present — so the first scaffold of a batch may take noticeably
+longer than the rest. It prints the scaffold path and the dist path it will produce
+(`<scaffold path>/dist`). Do this for all N briefs before dispatching any subagents.
 
 Then dispatch **N build subagents in parallel**, one per brief — see
 `superpowers:dispatching-parallel-agents` for the mechanics of a same-message parallel batch.

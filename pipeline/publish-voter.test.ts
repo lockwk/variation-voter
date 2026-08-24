@@ -164,14 +164,17 @@ describe("publishVoter", () => {
         { title: "B", distDir: b },
       ],
     };
-    addApp.mockRejectedValueOnce(new Error("upload failed")).mockRejectedValueOnce(new Error("upload failed"));
+    addApp.mockRejectedValueOnce(new Error("upload failed: 500 storage error")).mockRejectedValueOnce(new Error("upload failed"));
+    const warnings: string[] = [];
 
     await expect(
-      publishVoter(manifest, { createVoter, addApp, cwd: root, onWarning: () => {} })
+      publishVoter(manifest, { createVoter, addApp, cwd: root, onWarning: (message) => warnings.push(message) })
     ).rejects.toThrow(/uploaded successfully/);
 
     expect(createVoter).toHaveBeenCalledTimes(1);
     expect(addApp).toHaveBeenCalledTimes(2);
+    expect(warnings.some((w) => w.includes("A") && w.includes("upload failed: 500 storage error"))).toBe(true);
+    expect(warnings.some((w) => w.includes("B") && w.includes("upload failed"))).toBe(true);
   });
 
   it("creates the voter once and uploads each valid variation once, in manifest order", async () => {
