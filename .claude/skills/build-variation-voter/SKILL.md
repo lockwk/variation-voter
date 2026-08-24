@@ -100,8 +100,12 @@ Write a manifest for the successful builds:
 Save it (e.g. `.variations/<runId>/manifest.json`) and run:
 
 ```bash
-tsx pipeline/publish-voter.ts .variations/<runId>/manifest.json
+npm run variation:publish -- .variations/<runId>/manifest.json
 ```
+
+(Use the `npm run` wrapper, not a bare `tsx …` — `tsx` is a local dev dependency, not on
+PATH, so calling it directly fails with `command not found`. The wrapper resolves it via the
+project's local bin.)
 
 This creates the voter, uploads each dist via `add-app`, and prints a summary plus the `/v/<id>`
 link. It aborts if fewer than 2 valid builds are passed — Step 5 should already have caught this,
