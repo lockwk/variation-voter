@@ -1,6 +1,6 @@
 # create-variation-voter
 
-Scaffold a self-hosted [Variation Voter](https://github.com/OWNER/REPO) instance.
+Scaffold a self-hosted [Variation Voter](https://github.com/lockwk/variation-voter) instance.
 
 ```bash
 npx create-variation-voter my-voter

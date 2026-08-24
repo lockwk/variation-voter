@@ -1,0 +1,10 @@
+# Files below are stripped from the git-archive tarball that
+# `create-variation-voter` downloads for new users. Keep .claude/skills/ —
+# newcomers need the install + build skills.
+.conductor/ export-ignore
+tests/ export-ignore
+create-variation-voter/ export-ignore
+docs/plans/ export-ignore
+docs/superpowers/ export-ignore
+.worktreeinclude export-ignore
+.gitattributes export-ignore

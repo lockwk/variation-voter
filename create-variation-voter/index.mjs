@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const REPO_SLUG = "OWNER/REPO"; // TODO(Step R): replace with real owner/repo before publishing
+const REPO_SLUG = "lockwk/variation-voter";
 
 async function fetchTarball(source) {
   if (source.startsWith("http")) {
