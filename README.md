@@ -27,7 +27,10 @@ inside Claude Code:
    build subagents and publishes a real `/v/<id>` link.
 
 That's the whole chain: `npx create-variation-voter` → `install-variation-voter` →
-`build-variation-voter`.
+`build-variation-voter`. Your only manual action anywhere in this chain is a single
+browser "Accept" click the first time Vercel provisions a free database for you — the
+agent drives every other step, including creating the required Blob storage for app
+variations.
 
 Prefer to do it by hand instead? Keep reading.
 
@@ -35,15 +38,31 @@ Prefer to do it by hand instead? Keep reading.
 npx create-variation-voter my-voter
 cd my-voter
 npm install
-npm run db:migrate
-npm run dev
+vercel link
+vercel integration add neon --plan free_v3 -m auth=false   # accept terms in browser once
+vercel blob create-store my-voter-bundles --access public --yes
+vercel env add ADMIN_TOKEN production      # value from .env.local
+vercel env add CRON_SECRET production      # value from .env.local
+vercel --prod                              # first deploy; runs migrations
 ```
 
-`create-variation-voter` downloads the app into `my-voter/` and prompts you
-for `DATABASE_URL` and `PUBLIC_BASE_URL`, auto-generating `ADMIN_TOKEN` and
-`CRON_SECRET` into `my-voter/.env.local`. This gets you a working local
-**workshop**; it doesn't deploy anything, so links won't be shareable until
-you also stand up a **gallery** instance (see below).
+`create-variation-voter` downloads the app into `my-voter/` and auto-generates
+`ADMIN_TOKEN` and `CRON_SECRET` into `my-voter/.env.local` — it doesn't ask you
+for anything. `vercel link` connects the project; the Neon integration
+provisions a free database and injects `DATABASE_URL` automatically (accepting
+marketplace terms is a one-time click, not something to repeat per project);
+the Blob store is **required** for app-variation uploads to work and must be
+created with `--access public`. Then set `PUBLIC_BASE_URL` to the printed
+deploy URL and redeploy so share links resolve correctly:
+
+```bash
+vercel env add PUBLIC_BASE_URL production   # paste the URL vercel --prod just printed
+vercel --prod
+```
+
+This stands up both the local **workshop** and the deployed **gallery** in one
+pass. See [`docs/deploy.md`](docs/deploy.md) for the full reference, including
+the manual (non-integration) database path and teardown steps.
 
 If you've already cloned the repo yourself, set up `.env.local` manually
 instead:
@@ -66,11 +85,15 @@ Replace `<owner>/<repo>` above with this repository's actual GitHub path
 once it's pushed.
 
 1. Click the button above (or fork the repo and import it into Vercel yourself).
-2. Create a free [Neon](https://neon.tech) project and copy its connection string into `DATABASE_URL`.
+2. Create a free [Neon](https://neon.tech) project and copy its **direct/unpooled**
+   connection string (not the pooled one Neon's dashboard shows first — that one can
+   break build-time migrations) into `DATABASE_URL`.
 3. Set `ADMIN_TOKEN` to any long random string — this is the only credential that authorizes voter creation.
 4. Set `CRON_SECRET` to another long random string — Vercel Cron sends it automatically on scheduled cleanup runs.
 5. Set `PUBLIC_BASE_URL` to your deployed URL (e.g. `https://your-app.vercel.app`), used to build share links.
-6. Deploy. Then run migrations once against your database: `npx drizzle-kit migrate` (with `DATABASE_URL` set locally to your Neon connection string).
+6. Create a **public** Blob store — required for app-variation uploads —
+   `vercel blob create-store <name> --access public --yes`, which injects `BLOB_READ_WRITE_TOKEN`.
+7. Deploy. Then run migrations once against your database: `npx drizzle-kit migrate` (with `DATABASE_URL` set locally to your Neon connection string).
 
 Each self-hosted instance runs against its own Neon database — nobody else's usage ever touches your backend or your bill.
 

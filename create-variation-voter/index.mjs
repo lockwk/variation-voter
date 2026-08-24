@@ -9,7 +9,6 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
-import { createInterface } from "node:readline/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -83,35 +82,19 @@ async function main() {
       process.exit(1);
     }
 
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    // Read answers via the readline interface's async iterator rather than
-    // sequential rl.question() calls. When input is piped and closed right
-    // away (e.g. `echo "a\nb" | script` or a spawned child process test),
-    // rl.question() has a race: both "line" events can fire before the
-    // second question() call has subscribed its one-time listener, silently
-    // dropping the second answer and letting the process exit once stdin
-    // ends. Pulling from the shared async iterator avoids that race.
-    const lines = rl[Symbol.asyncIterator]();
-    async function ask(prompt) {
-      process.stdout.write(prompt);
-      const { value } = await lines.next();
-      return value ?? "";
-    }
-
-    const databaseUrl = await ask("Neon DATABASE_URL (postgres://...): ");
-    const publicBaseUrl = await ask(
-      "Public base URL (e.g. https://your-app.vercel.app) [http://localhost:3000]: "
-    );
-    rl.close();
-
     const adminToken = randomBytes(24).toString("hex");
     const cronSecret = randomBytes(24).toString("hex");
 
     const contents = [
-      `DATABASE_URL=${databaseUrl.trim()}`,
       `ADMIN_TOKEN=${adminToken}`,
       `CRON_SECRET=${cronSecret}`,
-      `PUBLIC_BASE_URL=${publicBaseUrl.trim() || "http://localhost:3000"}`,
+      "",
+      "# Filled automatically by the Vercel-Neon integration (or `vercel env pull`).",
+      "# For the manual path, paste your Neon direct/unpooled connection string here.",
+      "# DATABASE_URL=",
+      "",
+      "# Set this to your deployed URL after the first deploy.",
+      "# PUBLIC_BASE_URL=",
       "",
     ].join("\n");
 
@@ -119,14 +102,16 @@ async function main() {
 
     console.log("\nWrote .env.local with a generated ADMIN_TOKEN and CRON_SECRET.");
     console.log("Next steps:");
-    console.log(`  1. cd ${target}`);
-    console.log("  2. npm install");
-    console.log("  3. npm run db:migrate");
-    console.log("  4. npm run dev            # try it locally");
+    console.log(`  1. cd ${target} && npm install`);
+    console.log("  2. vercel link");
     console.log(
-      "  5. vercel link && vercel env add DATABASE_URL && vercel env add ADMIN_TOKEN && vercel env add CRON_SECRET"
+      "  3. vercel integration add neon --plan free_v3 -m auth=false   (accept terms in browser once; injects DATABASE_URL)"
     );
-    console.log("  6. vercel deploy --prod");
+    console.log("  4. vercel blob create-store <name> --access public --yes       (injects BLOB_READ_WRITE_TOKEN)");
+    console.log("  5. vercel env add ADMIN_TOKEN production   and   vercel env add CRON_SECRET production");
+    console.log("  6. vercel --prod                                               (first deploy; runs migrations)");
+    console.log("  7. set PUBLIC_BASE_URL to your deployed URL, then vercel --prod again");
+    console.log("  8. verify, then set VARIATION_VOTER_URL + VARIATION_VOTER_ADMIN_TOKEN in .env.local");
   } catch (err) {
     if (createdTarget) rmSync(target, { recursive: true, force: true });
     throw err;

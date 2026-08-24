@@ -16,6 +16,9 @@
 //   ]
 // }
 
+import { config } from "dotenv";
+config({ path: ".env.local" });
+
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -199,6 +202,7 @@ export async function publishVoter(manifest: VoterManifest, deps: PublishDeps): 
   }
 
   if (uploaded.length < MIN_VALID_VARIATIONS) {
+    for (const item of failed) warn(`Failed to upload "${item.title}": ${item.error}`);
     throw new Error(
       `Only ${uploaded.length} of ${valid.length} variation(s) uploaded successfully ` +
         `(need at least ${MIN_VALID_VARIATIONS}). Voter ${created.voter.id} was already created ` +

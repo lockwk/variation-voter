@@ -56,6 +56,31 @@ environment, and must be a **separate database per environment**:
   *every single test*, so this must never be a database you care about. See
   [Setting up the test database](#setting-up-the-test-database) below.
 
+**Recommended provisioning path: Vercel's Neon integration.**
+
+```bash
+vercel integration add neon --plan free_v3 -m auth=false
+```
+
+The first time this runs in a given Vercel account, it opens a browser tab to accept Neon's
+marketplace terms — a one-time manual click, then the CLI resumes and finishes on its own. It
+provisions a free Neon database, connects it to the project, and injects **both**
+`DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct) into the project's env vars,
+pulling both into `.env.local`. Migrations are configured to use the unpooled URL automatically
+— nothing else to wire up.
+
+**Fallback: manual Neon.** Create a free project at https://neon.tech and copy its connection
+string, then set it with `vercel env add DATABASE_URL production` (paste when prompted — never
+commit it or paste it into a chat transcript) and again in local `.env.local` for running
+migrations from your machine.
+
+**Pooled vs. unpooled matters.** Neon's dashboard shows the **pooled** connection string first
+by default — don't use that one for `DATABASE_URL` if you're setting it manually. The
+build-time migration step (`drizzle-kit migrate`) needs a **direct/unpooled** connection; pooled
+connections can silently break migrations. This is exactly why the integration path above
+injects both variables and points migrations at the unpooled one automatically — it's the
+easiest way to avoid this footgun.
+
 After provisioning a database, run migrations against it once:
 
 ```bash
@@ -65,6 +90,12 @@ npx drizzle-kit migrate
 (In this repo's own Vercel deployment, migrations also auto-run at build time —
 see `vercel.json` / build command — but that's a deployment-specific
 convenience, not something self-hosters need to replicate.)
+
+**Note on `vercel env pull`:** it rewrites `.env.local` with every value wrapped in double
+quotes (e.g. `DATABASE_URL="postgres://..."`). That's valid for tools that parse `.env` files
+properly, but can trip up anything that naively `source`s the file or splits on `=` without
+stripping quotes — check any custom tooling that reads `.env.local` directly if values start
+showing up with literal quote characters included.
 
 ### `BLOB_READ_WRITE_TOKEN`
 
@@ -76,6 +107,20 @@ variation bundles (self-contained built React apps uploaded via
 - When **unset**, bundles fall back to the local filesystem under `.bundles/`
   (`LocalFsBundleStorage`) — this is what local dev and the test suite use by
   default, so you don't need a Blob store just to run `npm run dev` or `npm test`.
+
+**Required for production if you intend to publish app variations.** A production deploy with
+no Blob store will happily serve link/image/embed variations, but `add-app` uploads fail with a
+cryptic error the moment someone tries to publish a self-contained app. Create the store
+explicitly:
+
+```bash
+vercel blob create-store <name> --access public --yes
+```
+
+`--access public` is **required**, not a default to leave alone — the app uploads bundles
+expecting a publicly-readable store, and a private store breaks uploads in a way that's hard to
+root-cause after the fact. This injects `BLOB_READ_WRITE_TOKEN` into the project and connects
+the store automatically; no separate `vercel env add` step is needed for it.
 
 Recommended: one token per environment (production and dev/preview each get
 their own Blob store), the same isolation principle as `DATABASE_URL`.
@@ -287,6 +332,30 @@ Note that `empty-store` clears bundles only, not DB rows — the `voters`/
 `variations` rows are cleared by `npm run purge:nonprod` (or would dangle
 otherwise pointing at deleted bundles), so for a full non-prod reset you'd
 use both.
+
+## Tearing down an instance
+
+If you're decommissioning a self-hosted instance entirely (not just resetting non-prod data —
+see [Non-prod cleanup](#non-prod-cleanup) above for that), **order matters**: empty and delete
+the Blob store *before* removing the Vercel project, not after.
+
+```bash
+# 1. Empty the store (permanent, irreversible):
+vercel blob empty-store --rw-token <store-rw-token> --yes
+
+# 2. Delete the (now-empty) store:
+vercel blob delete-store <store-id> --yes
+
+# 3. Only now remove the Vercel project:
+vercel project rm <project-name>
+```
+
+**Why this order and not the reverse:** deleting the Vercel project first strands the Blob
+store — its read-write token was issued through that project's connection, so once the project
+is gone you have no working credential to authenticate `empty-store` against it, and
+`delete-store` separately refuses to delete a non-empty store. Reversing steps 1–2 into after
+step 3 leaves you with a non-empty, orphaned store you can no longer clear or remove through the
+CLI. Always empty, then delete, then remove the project.
 
 ## Known limitations
 

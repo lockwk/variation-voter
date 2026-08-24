@@ -27,7 +27,6 @@ function buildFixtureTarball(): string {
 }
 
 function runCreateScript(
-  input: string,
   targetArg: string
 ): Promise<{ code: number | null; stdout: string; target: string }> {
   tempDir = mkdtempSync(join(tmpdir(), "variation-voter-create-"));
@@ -44,18 +43,14 @@ function runCreateScript(
     );
     let stdout = "";
     child.stdout.on("data", (chunk) => (stdout += chunk.toString()));
-    child.stdin.write(input);
     child.stdin.end();
     child.on("close", (code) => resolve({ code, stdout, target }));
   });
 }
 
 describe("create-variation-voter/index.mjs", () => {
-  it("fetches the app into the target dir and writes a .env.local with the provided DATABASE_URL and generated secrets", async () => {
-    const { code, target } = await runCreateScript(
-      "postgres://scratch\nhttps://my-app.vercel.app\n",
-      "app"
-    );
+  it("fetches the app into the target dir and writes a .env.local with generated secrets and commented placeholders, without prompting", async () => {
+    const { code, target } = await runCreateScript("app");
     expect(code).toBe(0);
 
     // The tarball's top-level app-main/ wrapper should be stripped, so the
@@ -64,9 +59,9 @@ describe("create-variation-voter/index.mjs", () => {
     expect(sentinel).toContain("app-main");
 
     const contents = readFileSync(join(target, ".env.local"), "utf8");
-    expect(contents).toContain("DATABASE_URL=postgres://scratch");
-    expect(contents).toContain("PUBLIC_BASE_URL=https://my-app.vercel.app");
     expect(contents).toMatch(/ADMIN_TOKEN=[0-9a-f]{48}/);
     expect(contents).toMatch(/CRON_SECRET=[0-9a-f]{48}/);
+    expect(contents).toContain("# DATABASE_URL=");
+    expect(contents).toContain("# PUBLIC_BASE_URL=");
   });
 });
