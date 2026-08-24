@@ -79,10 +79,7 @@ npm run dev
 No agent available, or you'd rather drive Vercel yourself? This is the same
 end state the `install-variation-voter` skill automates.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/<owner>/<repo>&env=DATABASE_URL,ADMIN_TOKEN,CRON_SECRET,PUBLIC_BASE_URL&envDescription=Neon+connection+string+and+a+shared+admin+token&project-name=variation-voter&repository-name=variation-voter)
-
-Replace `<owner>/<repo>` above with this repository's actual GitHub path
-once it's pushed.
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/lockwk/variation-voter&env=DATABASE_URL,ADMIN_TOKEN,CRON_SECRET,PUBLIC_BASE_URL&envDescription=Neon+connection+string+and+a+shared+admin+token&project-name=variation-voter&repository-name=variation-voter)
 
 1. Click the button above (or fork the repo and import it into Vercel yourself).
 2. Create a free [Neon](https://neon.tech) project and copy its **direct/unpooled**
