@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { commentSchema } from "@/lib/validation";
-import { createComment } from "@/db/queries";
+import { createComment, createReply } from "@/db/queries";
 import { findActiveVariationError, resolveViewerId } from "../_shared";
 
 export async function POST(
@@ -20,7 +20,25 @@ export async function POST(
   }
 
   const viewerId = resolveViewerId(request);
-  const { comment, voterName, anchorType, selector, offsetX, offsetY } = parsed.data;
+  const { comment, voterName, anchorType, selector, offsetX, offsetY, parentCommentId } = parsed.data;
+
+  // KEV-183: a `parentCommentId` on the body means this is a reply to an
+  // existing root pin, not a new pin drop — routed to createReply, which
+  // does the flat-thread validation (parent exists on this variation, and is
+  // itself a root) that zod alone can't express. No separate route: replies
+  // still POST to the same `/comments` endpoint as root comments.
+  if (parentCommentId) {
+    const result = await createReply(db, { variationId, viewerId, comment, voterName, parentCommentId });
+    if (!result.ok) {
+      const message =
+        result.error === "parent_not_root"
+          ? "Cannot reply to a reply — replies must target a root comment."
+          : "Parent comment not found on this variation.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    return NextResponse.json({ comment: result.comment }, { status: 201 });
+  }
+
   const created = await createComment(db, {
     variationId,
     viewerId,
