@@ -58,8 +58,15 @@ export function CommentsPanel({
   const canManage = voterStatus !== "archived";
   const [listRef, showFade] = useScrollFade<HTMLUListElement>([variation?.comments.length ?? 0]);
 
-  const openPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "open")) : [];
-  const completedPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "complete")) : [];
+  // KEV-183: this panel tracks pins, not the flat reply threads underneath
+  // them — a reply (parentCommentId !== null) never gets its own numbered
+  // pin marker on the stage (see annotation-layer.tsx), so it never gets a
+  // real `seq` either (left at the schema default 0); mixing replies into
+  // these seq-sorted lists would put them all first, ahead of pin #1. Reply
+  // threads are only ever visible inside the pin's own expanded card.
+  const rootComments = variation ? variation.comments.filter((c) => c.parentCommentId === null) : [];
+  const openPins = sortBySeq(rootComments.filter((c) => c.status === "open"));
+  const completedPins = sortBySeq(rootComments.filter((c) => c.status === "complete"));
   const hasAnyPins = openPins.length > 0 || completedPins.length > 0;
 
   function rowProps(item: VariationComment, nextStatus: "open" | "complete") {
