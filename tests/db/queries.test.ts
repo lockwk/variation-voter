@@ -379,7 +379,7 @@ describe("createComment", () => {
       expect(first.seq).toBe(1);
       expect(second.seq).toBe(2);
 
-      await deleteComment(db, { id: first.id, viewerId: "v1" });
+      await deleteComment(db, { id: first.id });
       // Deleting #1 must not roll the counter back — the next pin still
       // gets #3, not a reused #1. (Gaps like 1 -deleted-, 2, 3 are correct.)
       const third = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "third" });
@@ -425,21 +425,29 @@ describe("updateCommentStatus", () => {
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
-    const updated = await updateCommentStatus(db, { id: comment.id, viewerId: "viewer-1", status: "complete" });
+    const updated = await updateCommentStatus(db, { id: comment.id, status: "complete" });
 
     expect(updated?.status).toBe("complete");
   });
 
-  it("does not update (or return) a comment belonging to a different viewer", async () => {
+  // Product decision: any viewer of the voter (not just the comment's
+  // original author) may complete/reopen a pin — there is no author-only
+  // restriction at the query layer.
+  it("updates the status of a comment belonging to a different viewer", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
-    const result = await updateCommentStatus(db, { id: comment.id, viewerId: "viewer-2", status: "complete" });
+    const result = await updateCommentStatus(db, { id: comment.id, status: "complete" });
 
-    expect(result).toBeNull();
+    expect(result?.status).toBe("complete");
     const detail = await getVoterDetail(db, voter.id);
-    expect(detail?.variations[0].comments[0].status).toBe("open");
+    expect(detail?.variations[0].comments[0].status).toBe("complete");
+  });
+
+  it("returns null for a nonexistent comment id", async () => {
+    const result = await updateCommentStatus(db, { id: "nonexistent-id", status: "complete" });
+    expect(result).toBeNull();
   });
 });
 
@@ -449,23 +457,31 @@ describe("deleteComment", () => {
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
-    const deleted = await deleteComment(db, { id: comment.id, viewerId: "viewer-1" });
+    const deleted = await deleteComment(db, { id: comment.id });
 
     expect(deleted).toBe(true);
     const detail = await getVoterDetail(db, voter.id);
     expect(detail?.variations[0].comments).toHaveLength(0);
   });
 
-  it("does not delete a comment belonging to a different viewer, and reports failure", async () => {
+  // Product decision: any viewer of the voter (not just the comment's
+  // original author) may delete a pin — there is no author-only restriction
+  // at the query layer.
+  it("deletes a comment belonging to a different viewer, and reports success", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
-    const deleted = await deleteComment(db, { id: comment.id, viewerId: "viewer-2" });
+    const deleted = await deleteComment(db, { id: comment.id });
 
-    expect(deleted).toBe(false);
+    expect(deleted).toBe(true);
     const detail = await getVoterDetail(db, voter.id);
-    expect(detail?.variations[0].comments).toHaveLength(1);
+    expect(detail?.variations[0].comments).toHaveLength(0);
+  });
+
+  it("reports failure for a nonexistent comment id", async () => {
+    const deleted = await deleteComment(db, { id: "nonexistent-id" });
+    expect(deleted).toBe(false);
   });
 });
 

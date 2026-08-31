@@ -198,7 +198,9 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
     expect((await reopened.json()).comment.status).toBe("open");
   });
 
-  it("403s when a non-author tries to update status", async () => {
+  // Product decision: any viewer of the voter (anyone with the link) may
+  // complete/reopen any comment, not just its original author.
+  it("lets a non-author viewer update another viewer's comment status", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
@@ -208,6 +210,17 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
 
     const response = await patchComment(commentActionRequest("PATCH", { status: "complete" }, "viewer-2"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id, commentId: comment.id }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).comment.status).toBe("complete");
+  });
+
+  it("403s for a nonexistent comment id", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const response = await patchComment(commentActionRequest("PATCH", { status: "complete" }, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id, commentId: "nonexistent-id" }),
     });
     expect(response.status).toBe(403);
   });
@@ -260,7 +273,9 @@ describe("DELETE /api/voters/:voterId/variations/:variationId/comments/:commentI
     expect(detail!.variations[0].comments.find((c) => c.id === comment.id)).toBeUndefined();
   });
 
-  it("403s when a non-author tries to delete", async () => {
+  // Product decision: any viewer of the voter (anyone with the link) may
+  // delete any comment, not just its original author.
+  it("lets a non-author viewer delete another viewer's comment", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
@@ -271,9 +286,19 @@ describe("DELETE /api/voters/:voterId/variations/:variationId/comments/:commentI
     const response = await deleteCommentRoute(commentActionRequest("DELETE", undefined, "viewer-2"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id, commentId: comment.id }),
     });
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
 
     const detail = await getVoterDetail(db, voter.id, "viewer-1");
-    expect(detail!.variations[0].comments.find((c) => c.id === comment.id)).toBeDefined();
+    expect(detail!.variations[0].comments.find((c) => c.id === comment.id)).toBeUndefined();
+  });
+
+  it("403s when deleting a nonexistent comment id", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const response = await deleteCommentRoute(commentActionRequest("DELETE", undefined, "viewer-1"), {
+      params: Promise.resolve({ voterId: voter.id, variationId: variation.id, commentId: "nonexistent-id" }),
+    });
+    expect(response.status).toBe(403);
   });
 });

@@ -9,8 +9,9 @@ import type { VariationComment, VariationWithAggregates } from "@/db/queries";
 
 // KEV-172 chunk 4: this panel is a "pin tracker" for the selected variation's
 // comments — open pins render prominently, completed ones dim into a section
-// below, and each row (for its own author) carries a complete/reopen toggle
-// and a delete action.
+// below, and each row carries a complete/reopen toggle and a delete action.
+// Any viewer of an active voter (anyone with the link) may manage any pin,
+// own or not — the actions are gated only on the voter not being archived.
 //
 // KEV-172 (all-kinds-use-pins pass): the old plain-text "Your name" +
 // "Add a comment about <title>" composer that used to live here for
@@ -27,6 +28,7 @@ export function CommentsPanel({
   variation,
   commentError,
   selectedPinId,
+  voterStatus,
   onSelectPin,
   onToggleCommentStatus,
   onRequestDeleteComment,
@@ -38,6 +40,12 @@ export function CommentsPanel({
    * stage) — a sticky selection, echoed back so that row can show itself as
    * selected (KEV-172 polish pass, item 1). */
   selectedPinId?: string | null;
+  /** Any viewer may complete/reopen or delete any comment, but only while
+   * the voter is active — mirrors annotation-layer.tsx's
+   * `canManage={voterStatus !== "archived"}` on the pin card so the two
+   * manage surfaces agree. Optional to keep existing tests (which render
+   * without a voter in play) working; treated as "active" when omitted. */
+  voterStatus?: "active" | "archived";
   /** Selects (or, if already selected, deselects) the given pin — shared
    * with the stage's pin click handler via voter-shell.tsx's single
    * selectPin toggle (KEV-172 polish pass, item 1). */
@@ -47,6 +55,7 @@ export function CommentsPanel({
    * this comment — a row no longer confirms/deletes inline. */
   onRequestDeleteComment?: (variationId: string, commentId: string) => void;
 }) {
+  const canManage = voterStatus !== "archived";
   const [listRef, showFade] = useScrollFade<HTMLUListElement>([variation?.comments.length ?? 0]);
 
   const openPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "open")) : [];
@@ -56,6 +65,7 @@ export function CommentsPanel({
   function rowProps(item: VariationComment, nextStatus: "open" | "complete") {
     return {
       comment: item,
+      canManage,
       isSelected: selectedPinId === item.id,
       onSelect: () => onSelectPin?.(item.id),
       onRequestDelete: () => {
@@ -120,6 +130,7 @@ function CommentRow({
   comment,
   dimmed = false,
   isSelected,
+  canManage,
   onSelect,
   onRequestDelete,
   onToggleStatus,
@@ -127,6 +138,9 @@ function CommentRow({
   comment: VariationComment;
   dimmed?: boolean;
   isSelected: boolean;
+  /** Any viewer may complete/reopen or delete any comment while the voter
+   * is active — gates the trailing action icons (previously `comment.isOwn`). */
+  canManage: boolean;
   onSelect: () => void;
   onRequestDelete: () => void;
   onToggleStatus: () => void;
@@ -165,7 +179,7 @@ function CommentRow({
           </div>
           <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
         </div>
-        {comment.isOwn && (
+        {canManage && (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1">
             <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
               <TooltipTrigger

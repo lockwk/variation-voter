@@ -74,7 +74,9 @@ describe("CommentsPanel", () => {
 
   // KEV-172 (pinned-comment model): a comment is a pin, not a vote — the
   // row never renders a thumbs-up/down direction icon, regardless of
-  // `comment.direction`.
+  // `comment.direction`. Rendered with an archived voter so the (now
+  // any-viewer) complete/delete manage icons don't also show up here and
+  // muddy an svg-presence check that's specifically about the vote icon.
   it("never renders a vote-direction icon on a comment row", () => {
     render(
       <CommentsPanel
@@ -82,6 +84,7 @@ describe("CommentsPanel", () => {
           viewerVote: null,
           comments: [makeComment({ comment: "neutral note", voterName: "Kevin" })],
         })}
+        voterStatus="archived"
       />
     );
     const commentText = screen.getByText("neutral note");
@@ -97,6 +100,7 @@ describe("CommentsPanel", () => {
           viewerVote: "up",
           comments: [makeComment({ comment: "too busy", voterName: "Kevin", direction: "down", seq: 3 })],
         })}
+        voterStatus="archived"
       />
     );
     expect(screen.getByText("too busy")).toBeInTheDocument();
@@ -163,28 +167,46 @@ describe("CommentsPanel", () => {
     expect(dividerIdx).toBeLessThan(firstIdx);
   });
 
-  it("only shows complete/delete actions on the viewer's own pins", () => {
+  // Product decision: any viewer of an active voter may complete/reopen or
+  // delete any comment, own or not — these actions are no longer gated on
+  // `comment.isOwn`.
+  it("shows complete/delete actions on every pin, own or not, while the voter is active", () => {
     render(
       <CommentsPanel
         variation={makeVariation({
           comments: [makeComment({ id: "mine", comment: "mine", isOwn: true }), makeComment({ id: "theirs", comment: "theirs", isOwn: false })],
         })}
+        voterStatus="active"
         onToggleCommentStatus={() => {}}
         onRequestDeleteComment={() => {}}
       />
     );
-    expect(screen.getByLabelText(/mark comment complete/i)).toBeInTheDocument();
-    expect(screen.getAllByLabelText(/mark comment complete/i)).toHaveLength(1);
-    expect(screen.getByLabelText(/delete comment/i)).toBeInTheDocument();
-    expect(screen.getAllByLabelText(/delete comment/i)).toHaveLength(1);
+    expect(screen.getAllByLabelText(/mark comment complete/i)).toHaveLength(2);
+    expect(screen.getAllByLabelText(/delete comment/i)).toHaveLength(2);
   });
 
-  it("marks the author's own pin complete via the toggle", async () => {
+  it("hides complete/delete actions on every pin when the voter is archived", () => {
+    render(
+      <CommentsPanel
+        variation={makeVariation({
+          comments: [makeComment({ id: "mine", comment: "mine", isOwn: true }), makeComment({ id: "theirs", comment: "theirs", isOwn: false })],
+        })}
+        voterStatus="archived"
+        onToggleCommentStatus={() => {}}
+        onRequestDeleteComment={() => {}}
+      />
+    );
+    expect(screen.queryByLabelText(/mark comment complete/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/delete comment/i)).not.toBeInTheDocument();
+  });
+
+  it("marks a non-own pin complete via the toggle", async () => {
     const user = userEvent.setup();
     const onToggleCommentStatus = vi.fn();
     render(
       <CommentsPanel
-        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: true, status: "open" })] })}
+        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: false, status: "open" })] })}
+        voterStatus="active"
         onToggleCommentStatus={onToggleCommentStatus}
       />
     );
@@ -192,12 +214,13 @@ describe("CommentsPanel", () => {
     expect(onToggleCommentStatus).toHaveBeenCalledWith("a", "c1", "complete");
   });
 
-  it("reopens the author's own completed pin via the toggle", async () => {
+  it("reopens a non-own completed pin via the toggle", async () => {
     const user = userEvent.setup();
     const onToggleCommentStatus = vi.fn();
     render(
       <CommentsPanel
-        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: true, status: "complete" })] })}
+        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: false, status: "complete" })] })}
+        voterStatus="active"
         onToggleCommentStatus={onToggleCommentStatus}
       />
     );
@@ -209,12 +232,13 @@ describe("CommentsPanel", () => {
   // icon just requests confirmation, which voter-shell.tsx surfaces as a
   // shared modal (see tests/ui/voter-shell.test.tsx for the full open/confirm/
   // cancel round trip through that modal).
-  it("requests delete confirmation (not a direct delete) when the trash icon is clicked", async () => {
+  it("requests delete confirmation (not a direct delete) when the trash icon is clicked, on a non-own pin", async () => {
     const user = userEvent.setup();
     const onRequestDeleteComment = vi.fn();
     render(
       <CommentsPanel
-        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: true })] })}
+        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: false })] })}
+        voterStatus="active"
         onRequestDeleteComment={onRequestDeleteComment}
       />
     );

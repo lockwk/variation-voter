@@ -369,30 +369,31 @@ export async function createComment(
 }
 
 /**
- * Marks a pin comment open/complete. Scoped to the comment's original
- * author (id + viewerId) so a viewer can only update their own pins; returns
- * null if no row matches both.
+ * Marks a pin comment open/complete. Any viewer of the voter may do this
+ * (not just the comment's original author) — scoped only by comment id.
+ * Returns null if no row matches.
  */
 export async function updateCommentStatus(
   db: Database,
-  input: { id: string; viewerId: string; status: Comment["status"] }
+  input: { id: string; status: Comment["status"] }
 ) {
   const [comment] = await db
     .update(comments)
     .set({ status: input.status })
-    .where(and(eq(comments.id, input.id), eq(comments.viewerId, input.viewerId)))
+    .where(eq(comments.id, input.id))
     .returning();
   return comment ?? null;
 }
 
 /**
- * Deletes a pin comment, scoped to its original author (id + viewerId) so a
- * viewer can only delete their own pins. Returns whether a row was deleted.
+ * Deletes a pin comment. Any viewer of the voter may do this (not just the
+ * comment's original author) — scoped only by comment id. Returns whether a
+ * row was deleted.
  */
-export async function deleteComment(db: Database, input: { id: string; viewerId: string }) {
+export async function deleteComment(db: Database, input: { id: string }) {
   const deleted = await db
     .delete(comments)
-    .where(and(eq(comments.id, input.id), eq(comments.viewerId, input.viewerId)))
+    .where(eq(comments.id, input.id))
     .returning({ id: comments.id });
   return deleted.length > 0;
 }
