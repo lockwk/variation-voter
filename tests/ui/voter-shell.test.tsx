@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { VoterShell } from "@/app/v/[voterId]/voter-shell";
-import type { VoterDetail } from "@/db/queries";
+import type { VariationComment, VoterDetail } from "@/db/queries";
 
 // This project's vitest config sets `globals: false`, so @testing-library/react's
 // implicit auto-cleanup (which detects a global `afterEach`) never registers.
@@ -57,6 +57,61 @@ function makeVoter(overrides: Partial<VoterDetail> = {}): VoterDetail {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+function makeOwnComment(overrides: Partial<VariationComment> = {}): VariationComment {
+  return {
+    id: "c1",
+    comment: "fix this",
+    voterName: "Kevin",
+    createdAt: new Date(),
+    direction: null,
+    isOwn: true,
+    anchorType: "point",
+    selector: null,
+    offsetX: null,
+    offsetY: null,
+    status: "open",
+    seq: 1,
+    ...overrides,
+  };
+}
+
+// Builds a voter whose selected variation "a" carries one of the viewer's
+// own pins, for the complete/delete tests below.
+function makeVoterWithOwnComment(comment: VariationComment = makeOwnComment()): VoterDetail {
+  return makeVoter({
+    variations: [
+      {
+        id: "a",
+        title: "Option A",
+        description: null,
+        kind: "url",
+        src: "https://preview.example/a",
+        position: 0,
+        createdAt: new Date(),
+        up: 0,
+        down: 0,
+        score: 0,
+        viewerVote: null,
+        comments: [comment],
+      },
+      {
+        id: "b",
+        title: "Option B",
+        description: null,
+        kind: "url",
+        src: "https://preview.example/b",
+        position: 1,
+        createdAt: new Date(),
+        up: 0,
+        down: 0,
+        score: 0,
+        viewerVote: null,
+        comments: [],
+      },
+    ],
+  });
+}
 
 // Capture the real fetch before any test stubs it. The Neon HTTP driver used by
 // tests/setup.ts's global `afterEach` (`db.delete(...)`) makes its own fetch calls to
@@ -202,49 +257,227 @@ describe("VoterShell", () => {
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
   });
 
-  // H2: the composer is enabled from the start (commenting no longer requires
-  // voting first), and the submitted comment prepends immediately labeled
-  // "(You)" once the viewer has also voted.
-  it("posts a comment after voting, prepending it labeled '(You)'", async () => {
+  // KEV-172 (all-kinds-use-pins pass): the old plain-text composer is gone —
+  // every variation kind now comments exclusively by clicking a pin onto the
+  // stage (annotation-layer.tsx's PinComposer). This exercises that full
+  // flow through VoterShell: toggle comment mode, click the image to drop a
+  // draft pin, type into the composer, submit — same "(You)" labeling and
+  // confirmed-then-render behavior (KEV-172 chunk 4) as the old composer had.
+  function makeVoterWithImage(): VoterDetail {
+    return makeVoter({
+      variations: [
+        {
+          id: "a",
+          title: "Option A",
+          description: null,
+          kind: "image",
+          src: "https://preview.example/a.png",
+          position: 0,
+          createdAt: new Date(),
+          up: 0,
+          down: 0,
+          score: 0,
+          viewerVote: null,
+          comments: [],
+        },
+        {
+          id: "b",
+          title: "Option B",
+          description: null,
+          kind: "image",
+          src: "https://preview.example/b.png",
+          position: 1,
+          createdAt: new Date(),
+          up: 0,
+          down: 0,
+          score: 0,
+          viewerVote: null,
+          comments: [],
+        },
+      ],
+    });
+  }
+
+  it("posts a pinned comment after clicking the stage, prepending it labeled '(You)'", async () => {
     const user = userEvent.setup();
     stubApiFetch(async (url, init) => {
-      if (init?.method === "POST" && typeof url === "string" && url.endsWith("/votes")) {
-        return new Response(JSON.stringify({ vote: { id: "vote-a", direction: "up" }, state: "added" }), {
-          status: 201,
-        });
-      }
-      return new Response(JSON.stringify({ comment: { id: "comment-a" } }), { status: 200 });
+      // Confirmed-then-render (KEV-172 chunk 4): voter-shell.tsx's
+      // appendComment now renders straight from this server row (seq
+      // included) rather than a client-guessed reconstruction, so the mock
+      // has to look like the real POST /comments response.
+      const body = JSON.parse((init?.body as string) ?? "{}");
+      return new Response(
+        JSON.stringify({
+          comment: {
+            id: "comment-a",
+            variationId: "a",
+            viewerId: "viewer-x",
+            comment: body.comment,
+            voterName: body.voterName ?? null,
+            anchorType: "point",
+            selector: null,
+            offsetX: body.offsetX ?? 0.5,
+            offsetY: body.offsetY ?? 0.5,
+            status: "open",
+            seq: 1,
+            createdAt: new Date().toISOString(),
+          },
+        }),
+        { status: 201 }
+      );
     });
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    render(<VoterShell voter={makeVoterWithImage()} initialVariationId="a" />);
 
-    expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
+    await user.click(screen.getByLabelText(/^add a comment$/i));
+    await user.click(screen.getByLabelText(/click to add a pinned comment/i));
 
-    await user.click(screen.getByRole("button", { name: /thumbs up/i }));
-    await screen.findByRole("button", { name: /thumbs up, 1 vote$/i });
-
-    expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
-    await user.type(screen.getByLabelText(/your name/i), "Kevin");
-    await user.type(screen.getByLabelText(/add a comment about option a/i), "nice one");
-    await user.click(screen.getByLabelText(/send comment/i));
+    await user.type(screen.getByLabelText(/^your name/i), "Kevin");
+    await user.type(screen.getByLabelText(/^comment$/i), "nice one");
+    await user.click(screen.getByLabelText(/^post comment$/i));
 
     expect(await screen.findByText("nice one")).toBeInTheDocument();
     expect(await screen.findByText("Kevin (You)")).toBeInTheDocument();
   });
 
-  it("does not leak a draft comment across a variation switch", async () => {
+  it("discards a draft pin without posting when the composer is cancelled", async () => {
     const user = userEvent.setup();
-    stubApiFetch(
-      async () =>
-        new Response(JSON.stringify({ vote: { id: "vote-a", direction: "up" }, state: "added" }), { status: 201 })
-    );
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    render(<VoterShell voter={makeVoterWithImage()} initialVariationId="a" />);
 
-    await user.click(screen.getByRole("button", { name: /thumbs up/i }));
-    await screen.findByRole("button", { name: /thumbs up, 1 vote$/i });
-    await user.type(screen.getByLabelText(/add a comment about option a/i), "meant for A");
+    await user.click(screen.getByLabelText(/^add a comment$/i));
+    await user.click(screen.getByLabelText(/click to add a pinned comment/i));
+    await user.type(screen.getByLabelText(/^comment$/i), "meant for A");
 
-    await user.click(screen.getByRole("button", { name: "V2 Option B" }));
+    await user.click(screen.getByLabelText(/^cancel comment$/i));
 
     expect(screen.queryByDisplayValue("meant for A")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^comment$/i)).not.toBeInTheDocument();
+  });
+
+  // KEV-172 chunk 4: complete/delete apply optimistically, then reconcile
+  // against the PATCH/DELETE response — rolling back to the pre-click
+  // snapshot on failure, mirroring castVote's rollback pattern above.
+  it("marks the viewer's own pin complete optimistically", async () => {
+    const user = userEvent.setup();
+    stubApiFetch(async (url, init) => {
+      if (init?.method === "PATCH") {
+        return new Response(JSON.stringify({ comment: { id: "c1", status: "complete" } }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+
+    await user.click(screen.getByLabelText(/mark comment complete/i));
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/voters/voter1/variations/a/comments/c1",
+      expect.objectContaining({ method: "PATCH" })
+    );
+    expect(await screen.findByLabelText(/reopen comment/i)).toBeInTheDocument();
+  });
+
+  it("rolls back marking a pin complete and shows an error when the PATCH fails", async () => {
+    const user = userEvent.setup();
+    stubApiFetch(async () => new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }));
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+
+    await user.click(screen.getByLabelText(/mark comment complete/i));
+
+    expect(await screen.findByText(/couldn.t update this comment/i)).toBeInTheDocument();
+    // Rolled back to open — the toggle still reads "Mark comment complete".
+    expect(await screen.findByLabelText(/mark comment complete/i)).toBeInTheDocument();
+  });
+
+  // Delete is now a two-step flow through a shared confirmation modal
+  // (components/application/confirm-dialog.tsx) rather than an inline
+  // "Delete?" swap — clicking the trash icon opens it, and only its own
+  // Delete button actually deletes.
+  it("opens a confirmation modal when the trash icon is clicked, and deletes the viewer's own pin optimistically once confirmed", async () => {
+    const user = userEvent.setup();
+    stubApiFetch(async (url, init) => {
+      if (init?.method === "DELETE") return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response("{}", { status: 200 });
+    });
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+
+    await user.click(screen.getByLabelText(/^delete comment$/i));
+
+    const dialog = await screen.findByRole("dialog", { name: /delete comment/i });
+    expect(within(dialog).getByText(/are you sure you want to delete this comment\? this cannot be undone\./i)).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/voters/voter1/variations/a/comments/c1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+    await waitFor(() => expect(screen.queryByText("fix this")).not.toBeInTheDocument());
+    expect(screen.queryByRole("dialog", { name: /delete comment/i })).not.toBeInTheDocument();
+  });
+
+  it("cancels the confirmation modal without deleting anything", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    stubApiFetch(async (url, init) => {
+      if (init?.method === "DELETE") onDelete();
+      return new Response("{}", { status: 200 });
+    });
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+
+    await user.click(screen.getByLabelText(/^delete comment$/i));
+    const dialog = await screen.findByRole("dialog", { name: /delete comment/i });
+    await user.click(within(dialog).getByRole("button", { name: /^cancel$/i }));
+
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: /delete comment/i })).not.toBeInTheDocument();
+    // The pin is untouched — still there, and still deletable again.
+    expect(await screen.findByText("fix this")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^delete comment$/i)).toBeInTheDocument();
+  });
+
+  it("rolls back a delete and shows an error when the DELETE fails", async () => {
+    const user = userEvent.setup();
+    stubApiFetch(async () => new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }));
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+
+    await user.click(screen.getByLabelText(/^delete comment$/i));
+    const dialog = await screen.findByRole("dialog", { name: /delete comment/i });
+    await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+    expect(await screen.findByText(/couldn.t update this comment/i)).toBeInTheDocument();
+    // Rolled back — the pin's row (and its comment text) is back.
+    expect(await screen.findByText("fix this")).toBeInTheDocument();
+  });
+
+  // KEV-172 polish pass, item 1: replaces the old pulse-and-auto-clear
+  // `activePinId` with a sticky `selectedPinId` — clicking the same row
+  // again toggles the selection off (no separate "clear" control needed),
+  // and a different row click would instead replace it outright.
+  it("toggles a pin's selection off when its row is clicked a second time", async () => {
+    const user = userEvent.setup();
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+    const row = screen.getByLabelText(/select pin 1 on the stage/i);
+
+    await user.click(row);
+    expect(row).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(row);
+    expect(row).toHaveAttribute("aria-pressed", "false");
+  });
+
+  // The old behavior auto-cleared the selection ~1200ms after selecting;
+  // the new sticky selection must not — it should stay selected until an
+  // explicit deselect (toggle-off, a different selection, Esc, or an
+  // empty-canvas click), never on a timer.
+  it("keeps a pin selected without auto-clearing after a delay", async () => {
+    const user = userEvent.setup();
+    render(<VoterShell voter={makeVoterWithOwnComment()} initialVariationId="a" />);
+    const row = screen.getByLabelText(/select pin 1 on the stage/i);
+
+    await user.click(row);
+    expect(row).toHaveAttribute("aria-pressed", "true");
+
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(row).toHaveAttribute("aria-pressed", "true");
   });
 });

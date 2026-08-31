@@ -21,9 +21,13 @@ export function createVoterRequest(input: { title: string; description?: string;
   return adminFetch("/api/admin/voters", { method: "POST", body: JSON.stringify(input) });
 }
 
+// KEV-172: "url" is intentionally excluded from `kind` here — new "url"
+// variations can no longer be created (see lib/validation.ts's
+// addVariationSchema and cli/resolve-variation-input.ts, both of which block
+// it before a request would ever reach this far).
 export function addVariationRequest(
   voterId: string,
-  input: { title: string; description?: string; kind: "url" | "image" | "embed"; src: string }
+  input: { title: string; description?: string; kind: "image" | "embed"; src: string }
 ) {
   return adminFetch(`/api/admin/voters/${voterId}/variations`, {
     method: "POST",

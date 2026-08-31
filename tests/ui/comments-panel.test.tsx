@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { CommentsPanel } from "@/app/v/[voterId]/comments-panel";
-import type { VariationWithAggregates } from "@/db/queries";
+import type { VariationComment, VariationWithAggregates } from "@/db/queries";
 
 // This project's vitest config sets `globals: false`, so @testing-library/react's
 // implicit auto-cleanup (which detects a global `afterEach`) never registers.
@@ -31,39 +31,57 @@ function makeVariation(overrides: Partial<VariationWithAggregates>): VariationWi
   };
 }
 
-// Capture the real fetch before any test stubs it — a blanket mock would also
-// hijack the Neon HTTP driver's own calls made during tests/setup.ts's global
-// `afterEach` DB cleanup, so unmatched calls fall through to it.
-const realFetch = global.fetch;
+function makeComment(overrides: Partial<VariationComment>): VariationComment {
+  return {
+    id: "c1",
+    comment: "a note",
+    voterName: null,
+    createdAt: new Date(),
+    direction: null,
+    isOwn: false,
+    anchorType: "point",
+    selector: null,
+    offsetX: null,
+    offsetY: null,
+    status: "open",
+    seq: 1,
+    ...overrides,
+  };
+}
 
 afterEach(() => vi.restoreAllMocks());
 
+// KEV-172 (all-kinds-use-pins pass): the old plain-text "Your name" + "Add a
+// comment about <title>" composer is gone — every variation kind now places
+// comments exclusively via a pin clicked onto the stage
+// (annotation-layer.tsx), so this panel is purely a read/manage pin tracker,
+// for every kind, with no way to author a new comment from here.
 describe("CommentsPanel", () => {
-  it("enables the composer for an active voter even when the viewer hasn't voted", () => {
-    render(
-      <CommentsPanel
-        voterId="voter1"
-        variation={makeVariation({ viewerVote: null })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
-      />
-    );
-    expect(screen.queryByText(/vote to unlock commenting/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
+  it("never renders a plain-text composer, for any variation kind", () => {
+    for (const kind of ["app", "image", "embed", "url"] as const) {
+      cleanup();
+      render(<CommentsPanel variation={makeVariation({ kind })} onSelectPin={() => {}} />);
+      expect(screen.queryByLabelText(/add a comment about option a/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/send comment/i)).not.toBeInTheDocument();
+    }
   });
 
-  it("renders a comment with no associated vote with no thumb icon", () => {
+  it("shows 'No comments yet' when there are no pins", () => {
+    render(<CommentsPanel variation={makeVariation({})} />);
+    expect(screen.getByText(/no comments yet/i)).toBeInTheDocument();
+  });
+
+  // KEV-172 (pinned-comment model): a comment is a pin, not a vote — the
+  // row never renders a thumbs-up/down direction icon, regardless of
+  // `comment.direction`.
+  it("never renders a vote-direction icon on a comment row", () => {
     render(
       <CommentsPanel
-        voterId="voter1"
         variation={makeVariation({
           viewerVote: null,
-          comments: [
-            { id: "c1", comment: "neutral note", voterName: "Kevin", createdAt: new Date(), direction: null, isOwn: false },
-          ],
+          comments: [makeComment({ comment: "neutral note", voterName: "Kevin" })],
         })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
       />
     );
     const commentText = screen.getByText("neutral note");
@@ -72,131 +90,32 @@ describe("CommentsPanel", () => {
     expect(item?.querySelector("svg")).not.toBeInTheDocument();
   });
 
-  it("disables the send button while the comment is empty and enables it once there's text (28Z-0)", async () => {
-    const user = userEvent.setup();
+  it("renders each comment with its name, text, and pin number (H1)", () => {
     render(
       <CommentsPanel
-        voterId="voter1"
-        variation={makeVariation({ viewerVote: "up" })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
-      />
-    );
-    const sendButton = screen.getByLabelText(/send comment/i);
-    const commentInput = screen.getByLabelText(/add a comment about option a/i);
-
-    expect(sendButton).toBeDisabled();
-
-    await user.type(commentInput, "nice!");
-    expect(sendButton).not.toBeDisabled();
-
-    await user.clear(commentInput);
-    expect(sendButton).toBeDisabled();
-
-    await user.type(commentInput, "   ");
-    expect(sendButton).toBeDisabled();
-  });
-
-  it("locks the composer entirely for an archived voter, even if the viewer had already voted", () => {
-    render(
-      <CommentsPanel
-        voterId="voter1"
-        variation={makeVariation({ viewerVote: "up" })}
-        voterStatus="archived"
-        onCommentSubmit={() => {}}
-      />
-    );
-    expect(screen.getByLabelText(/add a comment about option a/i)).toBeDisabled();
-  });
-
-  it("POSTs to the comments endpoint, fires onCommentSubmit, and clears only the comment field", async () => {
-    const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if (typeof url === "string" && url.startsWith("/api/")) {
-          return new Response(JSON.stringify({ comment: { id: "comment1" } }), { status: 200 });
-        }
-        return realFetch(url, init);
-      })
-    );
-    const onCommentSubmit = vi.fn();
-    render(
-      <CommentsPanel
-        voterId="voter1"
-        variation={makeVariation({ id: "a", viewerVote: "up" })}
-        voterStatus="active"
-        onCommentSubmit={onCommentSubmit}
-      />
-    );
-
-    await user.type(screen.getByLabelText(/your name/i), "Kevin");
-    await user.type(screen.getByLabelText(/add a comment about option a/i), "nice!");
-    await user.click(screen.getByLabelText(/send comment/i));
-
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/voters/voter1/variations/a/comments",
-      expect.objectContaining({ method: "POST" })
-    );
-    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
-    expect(body).toEqual({ comment: "nice!", voterName: "Kevin" });
-    await vi.waitFor(() => expect(onCommentSubmit).toHaveBeenCalledWith("a", "nice!", "Kevin"));
-    expect(screen.getByLabelText(/add a comment about option a/i)).toHaveValue("");
-    expect(screen.getByLabelText(/your name/i)).toHaveValue("Kevin");
-  });
-
-  it("does nothing when submitting an empty comment", async () => {
-    const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        if (typeof url === "string" && url.startsWith("/api/")) return new Response("{}", { status: 200 });
-        return realFetch(url, init);
-      })
-    );
-    render(
-      <CommentsPanel
-        voterId="voter1"
-        variation={makeVariation({ id: "a", viewerVote: "up" })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
-      />
-    );
-    await user.click(screen.getByLabelText(/send comment/i));
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("renders each comment with its vote-direction icon, name, and text (H1)", () => {
-    render(
-      <CommentsPanel
-        voterId="voter1"
         variation={makeVariation({
           viewerVote: "up",
-          comments: [
-            { id: "c1", comment: "too busy", voterName: "Kevin", createdAt: new Date(), direction: "down", isOwn: false },
-          ],
+          comments: [makeComment({ comment: "too busy", voterName: "Kevin", direction: "down", seq: 3 })],
         })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
       />
     );
     expect(screen.getByText("too busy")).toBeInTheDocument();
     expect(screen.getByText("Kevin")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    const item = screen.getByText("too busy").closest("li");
+    expect(item?.querySelector("svg")).not.toBeInTheDocument();
   });
 
   it("labels the viewer's own comment '(You)', falling back to bare 'You' with no name", () => {
     render(
       <CommentsPanel
-        voterId="voter1"
         variation={makeVariation({
           viewerVote: "up",
           comments: [
-            { id: "c1", comment: "own with name", voterName: "Kevin", createdAt: new Date(), direction: "up", isOwn: true },
-            { id: "c2", comment: "own no name", voterName: null, createdAt: new Date(), direction: "up", isOwn: true },
+            makeComment({ id: "c1", comment: "own with name", voterName: "Kevin", direction: "up", isOwn: true, seq: 1 }),
+            makeComment({ id: "c2", comment: "own no name", voterName: null, direction: "up", isOwn: true, seq: 2 }),
           ],
         })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
       />
     );
     expect(screen.getByText("Kevin (You)")).toBeInTheDocument();
@@ -206,17 +125,142 @@ describe("CommentsPanel", () => {
   it("shows an 'Anonymous' fallback for a nameless comment that isn't the viewer's own", () => {
     render(
       <CommentsPanel
-        voterId="voter1"
         variation={makeVariation({
           viewerVote: "up",
-          comments: [
-            { id: "c1", comment: "no name given", voterName: null, createdAt: new Date(), direction: "up", isOwn: false },
-          ],
+          comments: [makeComment({ comment: "no name given", voterName: null, direction: "up" })],
         })}
-        voterStatus="active"
-        onCommentSubmit={() => {}}
       />
     );
     expect(screen.getByText("Anonymous")).toBeInTheDocument();
+  });
+
+  // KEV-172 chunk 4: the pin tracker groups by status — open pins prominent,
+  // completed pins dimmed under a "Completed" heading — and numbers are the
+  // server-frozen `seq`, not list position.
+  it("splits pins into open and completed sections, ordered by their frozen pin number", () => {
+    render(
+      <CommentsPanel
+        variation={makeVariation({
+          comments: [
+            makeComment({ id: "c3", comment: "third", seq: 3, status: "open" }),
+            makeComment({ id: "c1", comment: "first", seq: 1, status: "complete" }),
+            makeComment({ id: "c2", comment: "second", seq: 2, status: "open" }),
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    const listItems = screen.getAllByRole("listitem");
+    const texts = listItems.map((li) => li.textContent ?? "");
+    // "second" (open, #2) then "third" (open, #3) before the Completed
+    // divider, "first" (#1, but completed) after it.
+    const secondIdx = texts.findIndex((t) => t.includes("second"));
+    const thirdIdx = texts.findIndex((t) => t.includes("third"));
+    const dividerIdx = texts.findIndex((t) => t === "Completed");
+    const firstIdx = texts.findIndex((t) => t.includes("first"));
+    expect(secondIdx).toBeLessThan(thirdIdx);
+    expect(thirdIdx).toBeLessThan(dividerIdx);
+    expect(dividerIdx).toBeLessThan(firstIdx);
+  });
+
+  it("only shows complete/delete actions on the viewer's own pins", () => {
+    render(
+      <CommentsPanel
+        variation={makeVariation({
+          comments: [makeComment({ id: "mine", comment: "mine", isOwn: true }), makeComment({ id: "theirs", comment: "theirs", isOwn: false })],
+        })}
+        onToggleCommentStatus={() => {}}
+        onRequestDeleteComment={() => {}}
+      />
+    );
+    expect(screen.getByLabelText(/mark comment complete/i)).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/mark comment complete/i)).toHaveLength(1);
+    expect(screen.getByLabelText(/delete comment/i)).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/delete comment/i)).toHaveLength(1);
+  });
+
+  it("marks the author's own pin complete via the toggle", async () => {
+    const user = userEvent.setup();
+    const onToggleCommentStatus = vi.fn();
+    render(
+      <CommentsPanel
+        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: true, status: "open" })] })}
+        onToggleCommentStatus={onToggleCommentStatus}
+      />
+    );
+    await user.click(screen.getByLabelText(/mark comment complete/i));
+    expect(onToggleCommentStatus).toHaveBeenCalledWith("a", "c1", "complete");
+  });
+
+  it("reopens the author's own completed pin via the toggle", async () => {
+    const user = userEvent.setup();
+    const onToggleCommentStatus = vi.fn();
+    render(
+      <CommentsPanel
+        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: true, status: "complete" })] })}
+        onToggleCommentStatus={onToggleCommentStatus}
+      />
+    );
+    await user.click(screen.getByLabelText(/reopen comment/i));
+    expect(onToggleCommentStatus).toHaveBeenCalledWith("a", "c1", "open");
+  });
+
+  // Delete no longer deletes (or even confirms) inline — clicking the trash
+  // icon just requests confirmation, which voter-shell.tsx surfaces as a
+  // shared modal (see tests/ui/voter-shell.test.tsx for the full open/confirm/
+  // cancel round trip through that modal).
+  it("requests delete confirmation (not a direct delete) when the trash icon is clicked", async () => {
+    const user = userEvent.setup();
+    const onRequestDeleteComment = vi.fn();
+    render(
+      <CommentsPanel
+        variation={makeVariation({ id: "a", comments: [makeComment({ id: "c1", isOwn: true })] })}
+        onRequestDeleteComment={onRequestDeleteComment}
+      />
+    );
+    await user.click(screen.getByLabelText(/^delete comment$/i));
+    expect(onRequestDeleteComment).toHaveBeenCalledWith("a", "c1");
+  });
+
+  it("selects a pin (calls onSelectPin) when its row is clicked", async () => {
+    const user = userEvent.setup();
+    const onSelectPin = vi.fn();
+    render(
+      <CommentsPanel
+        variation={makeVariation({ comments: [makeComment({ id: "c1", comment: "click me" })] })}
+        onSelectPin={onSelectPin}
+      />
+    );
+    await user.click(screen.getByLabelText(/select pin 1 on the stage/i));
+    expect(onSelectPin).toHaveBeenCalledWith("c1");
+  });
+
+  // KEV-172 polish pass, item 1: selection is now sticky (no auto-clear
+  // timer) and conveyed via `aria-pressed` in addition to the background
+  // fill, so it isn't shown by color alone.
+  it("shows the selected row as aria-pressed and keeps other rows unpressed", () => {
+    render(
+      <CommentsPanel
+        variation={makeVariation({
+          comments: [makeComment({ id: "c1", comment: "one" }), makeComment({ id: "c2", comment: "two", seq: 2 })],
+        })}
+        selectedPinId="c1"
+      />
+    );
+    expect(screen.getByLabelText(/select pin 1 on the stage/i)).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText(/select pin 2 on the stage/i)).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("wraps the complete/reopen and delete actions with an accessible name (tooltip labels)", () => {
+    render(
+      <CommentsPanel variation={makeVariation({ comments: [makeComment({ id: "c1", isOwn: true, status: "open" })] })} />
+    );
+    expect(screen.getByLabelText(/mark comment complete/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^delete comment$/i)).toBeInTheDocument();
+  });
+
+  it("shows a failed complete/delete error", () => {
+    render(<CommentsPanel variation={makeVariation({})} commentError="Couldn't update this comment. Please try again." />);
+    expect(screen.getByText(/couldn.t update this comment/i)).toBeInTheDocument();
   });
 });

@@ -1,8 +1,10 @@
-import { pgTable, text, integer, timestamp, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, pgEnum, uniqueIndex, real } from "drizzle-orm/pg-core";
 
 export const voterStatus = pgEnum("voter_status", ["active", "archived"]);
 export const variationKind = pgEnum("variation_kind", ["url", "image", "embed", "app"]);
 export const voteDirection = pgEnum("vote_direction", ["up", "down"]);
+export const commentAnchorType = pgEnum("comment_anchor_type", ["element", "point"]);
+export const commentStatus = pgEnum("comment_status", ["open", "complete"]);
 
 export const voters = pgTable("voters", {
   id: text("id").primaryKey(),
@@ -25,6 +27,13 @@ export const variations = pgTable("variations", {
   src: text("src").notNull(),
   position: integer("position").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Monotonic per-variation counter for pin numbering (KEV-172 chunk 4): bumped
+  // by one on every new comment, and never decremented or reused, so a pin's
+  // assigned `comments.seq` (see below) stays frozen — "first pin is #1
+  // forever" — even after older pins are deleted. See createComment's
+  // UPDATE...RETURNING for how this is bumped race-safely without a
+  // transaction (neon-http has none).
+  commentSeq: integer("comment_seq").notNull().default(0),
 });
 
 export const votes = pgTable(
@@ -47,26 +56,39 @@ export const votes = pgTable(
   (table) => [uniqueIndex("votes_variation_viewer_unique").on(table.variationId, table.viewerId)]
 );
 
-export const comments = pgTable(
-  "comments",
-  {
-    id: text("id").primaryKey(),
-    variationId: text("variation_id")
-      .notNull()
-      .references(() => variations.id, { onDelete: "cascade" }),
-    // Anonymous viewer identity (the `vv_viewer` cookie). Nullable for the
-    // same reason as votes.viewerId above — Postgres treats NULLs as distinct
-    // in a unique index, so rows with an unknown viewer never collide with
-    // each other or with real comments. Every new comment sets this, which is
-    // what makes the unique index below enforce "one comment per viewer per
-    // variation" (a resubmission upserts rather than duplicating).
-    viewerId: text("viewer_id"),
-    comment: text("comment").notNull(),
-    voterName: text("voter_name"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [uniqueIndex("comments_variation_viewer_unique").on(table.variationId, table.viewerId)]
-);
+export const comments = pgTable("comments", {
+  id: text("id").primaryKey(),
+  variationId: text("variation_id")
+    .notNull()
+    .references(() => variations.id, { onDelete: "cascade" }),
+  // Anonymous viewer identity (the `vv_viewer` cookie). Nullable for the same
+  // reason as votes.viewerId above — Postgres treats NULLs as distinct in a
+  // unique index, so rows with an unknown viewer never collide with each
+  // other. Comments are now positioned "pin" comments: a viewer can drop many
+  // of them on the same variation, so there is no unique (variationId,
+  // viewerId) index here anymore.
+  viewerId: text("viewer_id"),
+  comment: text("comment").notNull(),
+  voterName: text("voter_name"),
+  // Pin placement. An "element" anchor stores a CSS `selector` re-resolved at
+  // render time; a "point" anchor stores a raw x/y offset (percentage of the
+  // variation frame) as a fallback when no stable selector applies. Defaults
+  // to 'point' with null selector/offsets so pre-pin legacy rows (backfilled
+  // by the migration that added these columns) remain valid without needing
+  // real coordinates.
+  anchorType: commentAnchorType("anchor_type").notNull().default("point"),
+  selector: text("selector"),
+  offsetX: real("offset_x"),
+  offsetY: real("offset_y"),
+  status: commentStatus("status").notNull().default("open"),
+  // Frozen pin number within its variation (KEV-172 chunk 4), assigned once at
+  // insert time from `variations.comment_seq` and never reassigned — see that
+  // column's comment and createComment. Default 0 only matters for the
+  // migration's own DDL step; the same migration backfills every existing row
+  // to a real 1-based number before the column is relied on anywhere.
+  seq: integer("seq").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export type Voter = typeof voters.$inferSelect;
 export type NewVoter = typeof voters.$inferInsert;

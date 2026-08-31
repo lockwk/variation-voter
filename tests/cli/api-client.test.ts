@@ -39,7 +39,7 @@ describe("cli/api-client", () => {
   });
 
   it("sends an authenticated POST to add a variation", async () => {
-    await addVariationRequest("voter1", { title: "A", kind: "url", src: "https://a" });
+    await addVariationRequest("voter1", { title: "A", kind: "embed", src: "<div>a</div>" });
     expect(fetch).toHaveBeenCalledWith(
       "https://example.vercel.app/api/admin/voters/voter1/variations",
       expect.objectContaining({ method: "POST" })
