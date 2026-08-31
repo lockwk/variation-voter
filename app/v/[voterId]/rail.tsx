@@ -89,6 +89,7 @@ export function Rail({
           variation={selected}
           commentError={commentError}
           selectedPinId={selectedPinId}
+          voterStatus={voterStatus}
           onSelectPin={onSelectPin}
           onToggleCommentStatus={onToggleCommentStatus}
           onRequestDeleteComment={onRequestDeleteComment}

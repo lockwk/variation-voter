@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ArrowUp, CheckCircle, RefreshCcw01, Trash01, X } from "@untitledui/icons";
+import { Button } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import type { Comment, CommentAnchorInput, VariationComment } from "@/db/queries";
@@ -185,7 +186,8 @@ export function AnnotationLayer({
   voterId: string;
   /** Gates the expanded pin card's Complete/Reopen/Delete actions (KEV-172
    * polish pass, item 3) the same way comments-panel.tsx's own actions are
-   * gated — an archived voter is read-only even for the pin's own author. */
+   * gated — an archived voter is read-only for every viewer, regardless of
+   * who authored a given pin. */
   voterStatus?: "active" | "archived";
   voterName: string;
   onVoterNameChange: (name: string) => void;
@@ -215,6 +217,37 @@ export function AnnotationLayer({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [positions, setPositions] = useState<Map<string, PinPos>>(new Map());
+  // The pin currently showing its hover preview (`PinCard` below, in
+  // `mode: "preview"`) — a separate, transient state from `selectedPinId`, which is sticky and
+  // driven by clicks/panel-row selection. Only one pin previews at a time.
+  const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
+  // Pointer hover opens the preview after a short delay (matching the old
+  // Tooltip's `delay={300}`) so a cursor merely passing over a pin doesn't
+  // flash it; keyboard focus (see the marker Button below) shows it
+  // immediately instead, since focus is always an intentional stop. This ref
+  // holds the pending open-timer so hover-end / unmount can cancel it before
+  // it fires — a leaked timer here would otherwise pop a preview open after
+  // the pointer has already moved on.
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    };
+  }, []);
+  function startHoverPreview(commentId: string) {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      hoverTimerRef.current = null;
+      setHoveredPinId(commentId);
+    }, 300);
+  }
+  function cancelHoverPreview(commentId: string) {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setHoveredPinId((current) => (current === commentId ? null : current));
+  }
   const crossOriginWarnedRef = useRef(false);
 
   function warnCrossOriginOnce() {
@@ -545,13 +578,34 @@ export function AnnotationLayer({
   }
 
   const openPinnedComments = comments.filter((c) => c.status === "open" && positions.has(c.id));
-  // The expanded card (item 3) is rendered once, at the overlay root — not
-  // nested inside a pin's own wrapper div below — so its x/y stay in the
+  // `PinCard` (below) is rendered once per active pin, at the overlay root —
+  // not nested inside a pin's own wrapper div below — so its x/y stay in the
   // same container-relative coordinate space as `positions`/PinComposer's
   // draft.x/draft.y, rather than being doubly offset by the pin wrapper's
   // own `left`/`top`.
   const selectedComment = selectedPinId ? openPinnedComments.find((c) => c.id === selectedPinId) : undefined;
   const selectedPos = selectedComment ? positions.get(selectedComment.id) : undefined;
+  // Same resolution as `selectedComment`/`selectedPos` above, for whichever
+  // pin is currently showing its hover preview. Suppressed when it's the
+  // selected pin — mirroring the old Tooltip's `isDisabled={isSelected}` —
+  // so the preview and the expanded card, which share the same placement,
+  // never both try to render in the same spot at once.
+  const hoveredComment =
+    hoveredPinId && hoveredPinId !== selectedPinId ? openPinnedComments.find((c) => c.id === hoveredPinId) : undefined;
+  const hoveredPos = hoveredComment ? positions.get(hoveredComment.id) : undefined;
+
+  // A single keyed list, not two separate conditional blocks — this is what
+  // makes a click-after-hover a true in-place DOM morph rather than an
+  // unmount+remount: React reconciles by `key` (the comment id), so when the
+  // same pin goes from "hovered" to "selected" the entry at that key just
+  // changes `mode` (preview → expanded) instead of the preview's node being
+  // torn down and the expanded card's node being mounted fresh. It's also
+  // what lets two different pins show at once (one expanded, one previewing)
+  // — see the worked examples on the PinCard doc comment below.
+  const activeCards = [
+    selectedComment && selectedPos ? { comment: selectedComment, pos: selectedPos, mode: "expanded" as const } : null,
+    hoveredComment && hoveredPos ? { comment: hoveredComment, pos: hoveredPos, mode: "preview" as const } : null,
+  ].filter((c): c is { comment: VariationComment; pos: PinPos; mode: "preview" | "expanded" } => c !== null);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
@@ -589,45 +643,62 @@ export function AnnotationLayer({
             className="pointer-events-none absolute"
             style={{ left: pos.x, top: pos.y }}
           >
-            {/* The hover mini-card stays a lightweight preview; once this
-                pin is selected, the expanded card below already shows its
-                full text, so the hover tooltip is disabled to avoid the two
-                overlapping. */}
-            <Tooltip title={pinAuthorLabel(comment)} description={comment.comment} placement="top" isDisabled={isSelected}>
-              <TooltipTrigger
-                aria-label={`Comment by ${pinAuthorLabel(comment)}: ${comment.comment}`}
-                aria-pressed={isSelected}
-                onPress={() => onSelectPin?.(comment.id)}
-                className={cx(
-                  "pointer-events-auto flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121] shadow-md transition-[box-shadow,transform] duration-300",
-                  isSelected && "scale-125 shadow-[0_0_0_4px_#FACC1580]"
-                )}
-              >
-                {comment.seq}
-              </TooltipTrigger>
-            </Tooltip>
+            {/* The hover preview (`PinCard` in `mode: "preview"`, rendered
+                once at the overlay root below via `activeCards`) deliberately
+                shares the expanded card's exact placement, so hovering a pin
+                and then clicking it never shifts the author line. This used
+                to be a react-aria `Tooltip` floating above
+                the pin — a different spot than the click-opened card beside
+                it — which is exactly the jarring hover→click jump this
+                replaces. A plain react-aria-components `Button` (rather than
+                the `Tooltip`/`TooltipTrigger` pair) keeps `onPress`,
+                keyboard activation, and focus handling while giving us
+                `onHoverStart`/`onHoverEnd`/`onFocus`/`onBlur` to drive
+                `hoveredPinId` ourselves. */}
+            <Button
+              aria-label={`Comment by ${pinAuthorLabel(comment)}: ${comment.comment}`}
+              aria-pressed={isSelected}
+              onPress={() => onSelectPin?.(comment.id)}
+              onHoverStart={() => startHoverPreview(comment.id)}
+              onHoverEnd={() => cancelHoverPreview(comment.id)}
+              onFocus={() => {
+                // Keyboard focus shows the preview immediately — no delay —
+                // since arriving via Tab is always an intentional stop,
+                // unlike a pointer merely passing over the pin.
+                if (hoverTimerRef.current) {
+                  clearTimeout(hoverTimerRef.current);
+                  hoverTimerRef.current = null;
+                }
+                setHoveredPinId(comment.id);
+              }}
+              onBlur={() => cancelHoverPreview(comment.id)}
+              className={cx(
+                "pointer-events-auto flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121] shadow-md transition-[box-shadow,transform] duration-300",
+                isSelected && "scale-125 shadow-[0_0_0_4px_#FACC1580]"
+              )}
+            >
+              {comment.seq}
+            </Button>
           </div>
         );
       })}
 
-      {selectedComment && selectedPos && (
-        <SelectedPinCard
-          comment={selectedComment}
-          pinX={selectedPos.x}
-          pinY={selectedPos.y}
+      {activeCards.map((c) => (
+        <PinCard
+          key={c.comment.id}
+          comment={c.comment}
+          pinX={c.pos.x}
+          pinY={c.pos.y}
+          mode={c.mode}
           containerRef={containerRef}
-          canManage={selectedComment.isOwn && voterStatus !== "archived"}
-          onClose={() => onSelectPin?.(selectedComment.id)}
+          canManage={voterStatus !== "archived"}
+          onClose={() => onSelectPin?.(c.comment.id)}
           onToggleStatus={() =>
-            onToggleCommentStatus?.(
-              variationId,
-              selectedComment.id,
-              selectedComment.status === "open" ? "complete" : "open"
-            )
+            onToggleCommentStatus?.(variationId, c.comment.id, c.comment.status === "open" ? "complete" : "open")
           }
-          onRequestDelete={() => onRequestDeleteComment?.(variationId, selectedComment.id)}
+          onRequestDelete={() => onRequestDeleteComment?.(variationId, c.comment.id)}
         />
-      )}
+      ))}
 
       {draft && (
         <PinComposer
@@ -675,7 +746,7 @@ function PinComposer({
 
   // Reading a ref's `.current` during render is disallowed (react-hooks/refs)
   // — measure the container's width in an effect instead, same as
-  // SelectedPinCard does below, and keep it current across a stage resize.
+  // PinCard does below, and keep it current across a stage resize.
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined);
   useEffect(() => {
     function measure() {
@@ -708,7 +779,7 @@ function PinComposer({
   const left = clampComposerLeft(x, containerWidth);
   // Prefer floating above the click point (same as below); flip below it
   // when there isn't enough room above so the composer never clips off the
-  // stage's top edge. Reuses SelectedPinCard's own estimated-height/gap
+  // stage's top edge. Reuses PinCard's own estimated-height/gap
   // constants below — this popover is roughly the same size, so a second,
   // near-duplicate estimate wouldn't buy anything.
   const showBelow = y < CARD_ESTIMATED_HEIGHT + CARD_GAP;
@@ -779,50 +850,232 @@ function PinComposer({
   );
 }
 
-const CARD_WIDTH = 288; // matches w-72 below (SelectedPinCard)
+const CARD_WIDTH = 288; // matches w-72 below (PinCard)
 const COMPOSER_WIDTH = 256; // matches w-64 above (PinComposer)
 const CARD_GUTTER = 8;
+// Still used by PinComposer's own above/below flip below — PinCard no
+// longer needs it now that it's top-aligned beside the pin instead of
+// floating above/below it, but PinComposer's placement is out of scope here.
 const CARD_ESTIMATED_HEIGHT = 180;
 const CARD_GAP = 12;
+// Half the selected pin marker's footprint (size-6 scaled to 1.25 ≈ 30px,
+// plus its 4px focus ring), rounded up — used to clear the marker itself
+// when placing the card beside it instead of centered over it.
+const PIN_RADIUS = 16;
 
 /**
- * Keeps the expanded card's horizontal center within `containerWidth`
- * (falling back to the pin's own x when the container hasn't been measured
- * yet) rather than letting it run past the stage's left/right edges.
+ * Places the expanded card BESIDE the pin (left-anchored, not centered over
+ * it) rather than floating above it — see KEV-172 follow-up. Prefers the
+ * side with more room: right of the pin when it's in the left half of the
+ * stage, left of the pin otherwise. Falls back to the other side if the
+ * preferred one would run past the stage's gutter, and as a last resort
+ * clamps into the stage bounds outright (narrower-than-card container).
+ * Returns the card's LEFT EDGE — pure function so it's unit-testable.
+ *
+ * `cardWidth` defaults to the expanded card's own width (`CARD_WIDTH`), but
+ * is parameterized so the hover preview card — same visual width today, but
+ * kept independent on purpose — can share this exact algorithm via
+ * `usePinCardPlacement` below rather than a second, drift-prone copy.
  */
-function clampCardLeft(pinX: number, containerWidth: number | undefined): number {
-  if (!containerWidth) return pinX;
-  const half = CARD_WIDTH / 2;
-  const min = half + CARD_GUTTER;
-  const max = containerWidth - half - CARD_GUTTER;
-  if (max < min) return containerWidth / 2; // container narrower than the card — just center it.
-  return Math.min(Math.max(pinX, min), max);
-}
+export function placeCardLeft(pinX: number, containerWidth: number | undefined, cardWidth: number = CARD_WIDTH): number {
+  if (!containerWidth) return pinX + PIN_RADIUS + CARD_GAP;
 
-/**
- * Keeps the composer's left edge within `containerWidth` (falling back to
- * the click's raw x when the container hasn't been measured yet) rather than
- * letting its right edge run past the stage's right edge. Unlike
- * `clampCardLeft` above, PinComposer isn't center-anchored (no
- * `-translate-x`) — it anchors its own left edge at the click's x — so this
- * clamps the left edge directly instead of a center point.
- */
-function clampComposerLeft(pinX: number, containerWidth: number | undefined): number {
-  if (!containerWidth) return pinX;
+  const preferRight = pinX < containerWidth / 2;
+  const rightLeft = pinX + PIN_RADIUS + CARD_GAP;
+  const leftLeft = pinX - PIN_RADIUS - CARD_GAP - cardWidth;
+
+  const rightFits = rightLeft + cardWidth <= containerWidth - CARD_GUTTER;
+  const leftFits = leftLeft >= CARD_GUTTER;
+
+  let left: number;
+  if (preferRight) {
+    left = rightFits ? rightLeft : leftFits ? leftLeft : rightLeft;
+  } else {
+    left = leftFits ? leftLeft : rightFits ? rightLeft : leftLeft;
+  }
+
   const min = CARD_GUTTER;
-  const max = containerWidth - COMPOSER_WIDTH - CARD_GUTTER;
-  if (max < min) return min; // container narrower than the composer — just left-align it.
-  return Math.min(Math.max(pinX, min), max);
+  const max = containerWidth - cardWidth - CARD_GUTTER;
+  if (max < min) return min; // container narrower than the card — just left-align it.
+  return Math.min(Math.max(left, min), max);
 }
 
-// KEV-172 polish pass, item 3: replaces the hover-only mini card with a
-// larger, persistent, actionable one once a pin is selected (see the
-// AnnotationLayer render above — this only mounts when `isSelected`).
-function SelectedPinCard({
+/**
+ * Shared placement logic for `PinCard` in both its `preview` and `expanded`
+ * modes — the single source of truth that guarantees they land in the EXACT
+ * same spot (same side of the pin, same top-aligned row) so hovering a pin
+ * and then clicking it never shifts the author line. Both modes pass the
+ * same `cardWidth` (they're the same visual width), so this is really just
+ * factoring out "measure the stage + the card's own first row, then run
+ * `placeCardLeft`" into one hook instead of two near-identical effects.
+ */
+function usePinCardPlacement({
+  pinX,
+  pinY,
+  containerRef,
+  cardWidth,
+  mode,
+}: {
+  pinX: number;
+  pinY: number;
+  containerRef: RefObject<HTMLDivElement | null>;
+  cardWidth: number;
+  /** Because `PinCard` is now a single persistent node across preview →
+   * expanded (see `PinCard`'s own doc comment), the header bar appearing on
+   * expand changes the first message row's `offsetTop` mid-lifetime, not
+   * just on mount. Included in the measuring effect's deps below purely to
+   * force a re-measure when it flips — its value is never read directly. */
+  mode: "preview" | "expanded";
+}): {
+  left: number;
+  top: number;
+  messageRowRef: RefObject<HTMLDivElement | null>;
+  cardRef: RefObject<HTMLDivElement | null>;
+} {
+  // Reading a ref's `.current` during render is disallowed (react-hooks/refs)
+  // — measure the container's width in an effect instead, same as the
+  // `positions` recompute effect above does for pin coordinates, and keep it
+  // current across a stage resize. While we're in here, also measure the
+  // first message row's offset from the card's own top edge (see `top`
+  // below) — both are stage-layout-dependent, so one resize-aware effect
+  // covers both.
+  //
+  // `useLayoutEffect`, not `useEffect`: the header bar mounting/unmounting on
+  // a preview↔expanded mode change (`mode` is in the deps below) shifts
+  // `messageRowRef.current.offsetTop` — with a plain `useEffect` that shift
+  // would only be measured (and `top` recomputed) AFTER the browser had
+  // already painted a frame with the stale offset, i.e. the card's body would
+  // visibly jump down by the header's height for one frame when a preview
+  // expands. Measuring synchronously before paint, via `useLayoutEffect`,
+  // means `top` is already correct by the time the mode-change render
+  // commits, so the body never jumps — only the header bar's own entrance
+  // animation is visible. This component only ever renders client-side
+  // (inside the interactive stage overlay, never during SSR), so there's no
+  // `useLayoutEffect` SSR warning to guard against here.
+  const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined);
+  const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined);
+  const [messageOffsetTop, setMessageOffsetTop] = useState<number | undefined>(undefined);
+  const [cardHeight, setCardHeight] = useState<number | undefined>(undefined);
+  const messageRowRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    function measure() {
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      setContainerWidth(containerRect?.width);
+      setContainerHeight(containerRect?.height);
+      setMessageOffsetTop(messageRowRef.current?.offsetTop);
+      setCardHeight(cardRef.current?.getBoundingClientRect().height);
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [containerRef, mode]);
+
+  // Beside, not centered-above: the card anchors its LEFT edge next to the
+  // pin (see `placeCardLeft`) instead of horizontally centering over it.
+  const left = placeCardLeft(pinX, containerWidth, cardWidth);
+  // Top-aligned to the pin: line the first message row (author name, ref'd
+  // by the caller) up with the pin's own top edge, rather than floating the
+  // whole card above/below it. `pinY` is the pin's CENTER, so its top edge is
+  // `pinY - PIN_RADIUS`; subtracting the row's measured offset within the
+  // card gives the card's own top edge. Falls back to `44` (an estimate of
+  // the header-bar-plus-padding height above that row) until the first
+  // effect pass has measured it — a preview card has no header bar, so its
+  // real offset settles closer to its own padding, but the pre-measurement
+  // fallback only matters for one frame either way.
+  let top = pinY - PIN_RADIUS - (messageOffsetTop ?? 44);
+  // Keep the card's BOTTOM edge inside the stage the same way its left/right
+  // edges are kept in bounds by `placeCardLeft`: once the card's own height
+  // has been measured, pull `top` up so `top + cardHeight` clears the bottom
+  // gutter. Without this a pin low on a tall stage would grow its card (which
+  // extends downward from the pin's top) past the stage's bottom edge, where
+  // the `overflow-auto` stage wrapper clips it. Only applied when the card
+  // actually fits between the top and bottom gutters; if it's taller than the
+  // stage there's no non-clipping position, so we fall through to the top
+  // clamp below and let the bottom overflow (unavoidable) rather than hiding
+  // the author row off the top.
+  if (containerHeight !== undefined && cardHeight !== undefined) {
+    const maxTop = containerHeight - cardHeight - CARD_GUTTER;
+    if (maxTop >= CARD_GUTTER) top = Math.min(top, maxTop);
+  }
+  // Clamped to `CARD_GUTTER` so the card never clips off the stage's TOP edge
+  // for a pin placed near it (or after the bottom clamp above pulled it up).
+  top = Math.max(top, CARD_GUTTER);
+
+  return { left, top, messageRowRef, cardRef };
+}
+
+/**
+ * The author row + comment body shared, byte-for-byte, between `PinCard`'s
+ * `preview` and `expanded` modes — the actual guarantee behind "hovering →
+ * clicking never shifts the author line". If the two modes each rendered
+ * their own copy of this markup, a future edit to one (padding, font size,
+ * wrapping) could silently drift it out of alignment with the other; sharing
+ * one component makes that impossible. (It's also, post-merge, literally the
+ * same DOM subtree across a preview→expanded morph, not just visually
+ * identical markup — see `PinCard`'s own doc comment.)
+ */
+function PinCardBody({
+  comment,
+  messageRowRef,
+}: {
+  comment: VariationComment;
+  messageRowRef: RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <>
+      <div ref={messageRowRef} className="flex min-w-0 items-center">
+        <span className="truncate text-sm font-medium text-[#E8E8E8]">{pinAuthorLabel(comment)}</span>
+      </div>
+      <p className="whitespace-pre-wrap text-sm text-[#E8E8E8]">{comment.comment}</p>
+    </>
+  );
+}
+
+/**
+ * The pinned-comment card, in either of two modes — a single component
+ * because AnnotationLayer's `activeCards` keys its render by comment id (see
+ * above), so React reuses THE SAME DOM NODE when a pin's card goes from
+ * `mode: "preview"` (hover) to `mode: "expanded"` (click) instead of
+ * unmounting one component and mounting a different one in its place. That's
+ * what makes hover→click a true in-place morph rather than a swap that merely
+ * looks similar: the container div persists, `PinCardBody` (author row +
+ * comment text) never re-mounts and so never re-animates, and the only thing
+ * that visibly enters is the header action bar — because it's the only piece
+ * of markup that's actually new between the two modes.
+ *
+ * - **preview** (hover/focus, not yet clicked): `aria-hidden`,
+ *   `pointer-events-none`, no `role`, no header bar, no click handler — a
+ *   lightweight read-only stand-in. `aria-hidden` because the pin itself
+ *   already carries the equivalent text in its `aria-label` (see the marker
+ *   `Button` in AnnotationLayer); `pointer-events-none` so it never
+ *   intercepts the click that would open the real (expanded) card.
+ * - **expanded** (selected/clicked): `role="dialog"`, `aria-label`,
+ *   `pointer-events-auto`, `onClick` stopPropagation (so a click on the
+ *   card's own padding doesn't bubble up to stage.tsx's "click empty canvas"
+ *   deselect handler — this card being open is itself evidence the click
+ *   landed on non-empty canvas), and the header action bar (Complete/Reopen +
+ *   Delete when `canManage`, Close always).
+ *
+ * Both modes share `usePinCardPlacement` (same `cardWidth`) and
+ * `PinCardBody`, so the author row lands in the EXACT same spot in both — no
+ * visual jump when a hover turns into a click. The container's own entrance
+ * transition differs slightly by mode (preview gets a small translate +
+ * opacity settle since it has no other motion of its own; expanded is
+ * opacity-only, deliberately with NO transform, so it never re-shifts a body
+ * that a preview may already be showing in the same spot) — only the header
+ * bar gets its own, slightly delayed fade+slide-down entrance, since it's the
+ * one thing that's actually new on click. `z-40` for expanded vs `z-30` for
+ * preview so an open card sits above any concurrent preview of another pin
+ * (see AnnotationLayer's `activeCards`, which can render both a pin's
+ * expanded card and a different pin's preview card at once).
+ */
+export function PinCard({
   comment,
   pinX,
   pinY,
   containerRef,
+  mode,
   canManage,
   onClose,
   onToggleStatus,
@@ -832,107 +1085,139 @@ function SelectedPinCard({
   pinX: number;
   pinY: number;
   containerRef: RefObject<HTMLDivElement | null>;
-  /** Author-only, and only while the voter is active — mirrors
-   * comments-panel.tsx's own `comment.isOwn` + archived-lockout rule. */
+  mode: "preview" | "expanded";
+  /** Any viewer may manage any pin, own or not — gated only on the voter
+   * being active, mirroring comments-panel.tsx's own archived-lockout rule.
+   * Unused in `preview` mode (no header bar is rendered at all). */
   canManage: boolean;
   onClose: () => void;
   onToggleStatus: () => void;
   /** Opens the shared delete-confirmation modal — see the
-   * onRequestDeleteComment doc on AnnotationLayer's own props above. */
+   * onRequestDeleteComment doc on AnnotationLayer's own props above. Unused
+   * in `preview` mode. */
   onRequestDelete: () => void;
 }) {
-  // Reading a ref's `.current` during render is disallowed (react-hooks/refs)
-  // — measure the container's width in an effect instead, same as the
-  // `positions` recompute effect above does for pin coordinates, and keep it
-  // current across a stage resize.
-  const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    function measure() {
-      setContainerWidth(containerRef.current?.getBoundingClientRect().width);
-    }
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [containerRef]);
-
-  const left = clampCardLeft(pinX, containerWidth);
-  // Prefer floating above the pin (matches PinComposer's own placement);
-  // flip below it when there isn't enough room above so the card never
-  // clips off the stage's top edge. `left`/`top` here are in the same
-  // container-relative coordinate space as `positions`/PinComposer's
-  // draft.x/draft.y — this card is a root-level sibling of the per-pin
-  // wrapper divs above, not nested inside one, so it isn't doubly offset by
-  // a pin wrapper's own `left`/`top`.
-  const showBelow = pinY < CARD_ESTIMATED_HEIGHT + CARD_GAP;
+  // Beside, not centered-above: the card anchors its LEFT edge next to the
+  // pin (see `placeCardLeft`) instead of horizontally centering over it, so
+  // there's no `-translate-x-1/2` here. Top-aligned to the pin:
+  // `usePinCardPlacement` lines the first message row (ref'd below, via
+  // `PinCardBody`) up with the pin's own top edge, re-measuring synchronously
+  // whenever `mode` changes so the header bar appearing/disappearing never
+  // makes the body jump for a frame (see that hook's own doc comment).
+  const { left, top, messageRowRef, cardRef } = usePinCardPlacement({
+    pinX,
+    pinY,
+    containerRef,
+    cardWidth: CARD_WIDTH,
+    mode,
+  });
+  const expanded = mode === "expanded";
 
   return (
     <div
-      role="dialog"
-      aria-label={`Pin ${comment.seq} comment`}
-      // Stops a click inside the card (e.g. on its padding, not one of its
-      // buttons) from bubbling up to stage.tsx's "click empty canvas"
-      // deselect handler — this card being open is itself evidence the
-      // click landed on non-empty canvas.
-      onClick={(event) => event.stopPropagation()}
-      style={{ left, top: pinY }}
+      ref={cardRef}
+      role={expanded ? "dialog" : undefined}
+      aria-label={expanded ? `Pin ${comment.seq} comment` : undefined}
+      aria-hidden={expanded ? undefined : "true"}
+      onClick={expanded ? (event) => event.stopPropagation() : undefined}
+      style={{ left, top }}
       className={cx(
-        "pointer-events-auto absolute z-30 flex w-72 -translate-x-1/2 flex-col gap-2 rounded-lg border border-[#3F3F46] bg-[#2B2B2B] p-3 shadow-lg",
-        showBelow ? "translate-y-[12px]" : "-translate-y-[calc(100%+12px)]"
+        "absolute flex w-72 flex-col gap-2 rounded-lg border border-[#3F3F46] bg-[#2B2B2B] p-3",
+        expanded
+          ? // Opacity-only entrance, deliberately with NO transform: a
+            // preview card may already be showing this exact body in this
+            // exact spot (see `usePinCardPlacement`), so a transform here
+            // would shift it and break the continuity a click is supposed to
+            // preserve. Only the header bar below (the one thing that's
+            // actually new on click) gets to move; the body just fades in
+            // place alongside it.
+            "pointer-events-auto z-40 opacity-100 shadow-lg transition-opacity duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0"
+          : // Softens today's hard pop (this mounts ~300ms into a hover, with
+            // no animation of its own) with a quick fade + gentle downward
+            // settle — `@starting-style` (via Tailwind's `starting:` variant)
+            // supplies the "before mount" state a `transition` needs to
+            // animate from. The translate is `motion-safe:`-gated (movement
+            // only), while the opacity fade plays for everyone, including
+            // reduced-motion users.
+            "pointer-events-none z-30 translate-y-0 opacity-100 shadow-lg transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:translate-y-[3px]"
       )}
     >
-      {/* Header bar: right-aligned action icon-buttons, visually separated
-          from the author + body below by a divider — Close is always
-          present (even for non-authors / an archived voter), while
-          Complete/Reopen and Delete only join it when `canManage` is true. */}
-      <div className="flex items-center justify-end gap-1 border-b border-[#3F3F46] pb-2">
-        {canManage && (
-          <>
-            <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
+      {expanded && (
+        <>
+          {/* Header bar: right-aligned action icon-buttons, visually
+              separated from the author + body below by a divider — Close is
+              always present (even for non-authors / an archived voter),
+              while Complete/Reopen and Delete only join it when `canManage`
+              is true. This is the one part of the card that's actually NEW
+              when a pin goes from previewed to expanded (the body below is
+              identical to the preview), so it gets its own, slightly delayed
+              fade+slide-down entrance — the translate is `motion-safe:`-gated
+              so reduced-motion users still get the fade without any
+              movement. */}
+          <div className="flex translate-y-0 items-center justify-end gap-1 border-b border-[#3F3F46] pb-2 opacity-100 transition-[opacity,transform] duration-[190ms] delay-[50ms] ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:-translate-y-1.5">
+            {canManage && (
+              <>
+                <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
+                  <TooltipTrigger
+                    aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
+                    onPress={onToggleStatus}
+                    className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
+                  >
+                    {comment.status === "open" ? (
+                      <CheckCircle aria-hidden="true" className="size-4" />
+                    ) : (
+                      <RefreshCcw01 aria-hidden="true" className="size-4" />
+                    )}
+                  </TooltipTrigger>
+                </Tooltip>
+                <Tooltip title="Delete" placement="top">
+                  <TooltipTrigger
+                    aria-label="Delete comment"
+                    onPress={onRequestDelete}
+                    className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-error-primary"
+                  >
+                    <Trash01 aria-hidden="true" className="size-4" />
+                  </TooltipTrigger>
+                </Tooltip>
+              </>
+            )}
+            <Tooltip title="Close" placement="top">
               <TooltipTrigger
-                aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
-                onPress={onToggleStatus}
-                className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
+                aria-label="Close comment"
+                onPress={onClose}
+                className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
               >
-                {comment.status === "open" ? (
-                  <CheckCircle aria-hidden="true" className="size-4" />
-                ) : (
-                  <RefreshCcw01 aria-hidden="true" className="size-4" />
-                )}
+                <X aria-hidden="true" className="size-4" />
               </TooltipTrigger>
             </Tooltip>
-            <Tooltip title="Delete" placement="top">
-              <TooltipTrigger
-                aria-label="Delete comment"
-                onPress={onRequestDelete}
-                className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-error-primary"
-              >
-                <Trash01 aria-hidden="true" className="size-4" />
-              </TooltipTrigger>
-            </Tooltip>
-          </>
-        )}
-        <Tooltip title="Close" placement="top">
-          <TooltipTrigger
-            aria-label="Close comment"
-            onPress={onClose}
-            className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
-          >
-            <X aria-hidden="true" className="size-4" />
-          </TooltipTrigger>
-        </Tooltip>
-      </div>
+          </div>
+        </>
+      )}
 
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="flex size-5 shrink-0 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121]"
-        >
-          {comment.seq}
-        </span>
-        <span className="truncate text-sm font-medium text-[#E8E8E8]">{pinAuthorLabel(comment)}</span>
-      </div>
-
-      <p className="whitespace-pre-wrap text-sm text-[#E8E8E8]">{comment.comment}</p>
+      {/* Author row + comment body — the same `PinCardBody` node across a
+          preview→expanded morph (see this component's own doc comment), so
+          it's never re-mounted and never re-animates when the header bar
+          above it appears. Its measured `offsetTop` is what `top` aligns to
+          the pin's own top edge, so this row (not the card's outer padding)
+          reads as level with the pin. */}
+      <PinCardBody comment={comment} messageRowRef={messageRowRef} />
     </div>
   );
 }
+
+/**
+ * Keeps the composer's left edge within `containerWidth` (falling back to
+ * the click's raw x when the container hasn't been measured yet) rather than
+ * letting its right edge run past the stage's right edge. Unlike
+ * `placeCardLeft` above, PinComposer isn't placed beside a pin — it anchors
+ * its own left edge at the click's x — so this clamps the left edge directly
+ * instead of choosing a preferred side.
+ */
+function clampComposerLeft(pinX: number, containerWidth: number | undefined): number {
+  if (!containerWidth) return pinX;
+  const min = CARD_GUTTER;
+  const max = containerWidth - COMPOSER_WIDTH - CARD_GUTTER;
+  if (max < min) return min; // container narrower than the composer — just left-align it.
+  return Math.min(Math.max(pinX, min), max);
+}
+

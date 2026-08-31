@@ -258,10 +258,20 @@ function VariationMedia({
   // pins. Wrapped the same way as the `app`/`image` cases: containerRef gives
   // AnnotationLayer's overlay a positioning root, embedRef is the actual
   // hoverable/clickable content element (scoped selector resolution, hit
-  // testing) — a plain `relative` wrapper (not `w-full h-full`, unlike the
-  // `app` iframe case) so it keeps sizing to its content exactly as before.
+  // testing). The container fills the stage (`w-full h-full min-h-[400px]`,
+  // matching the `app` case) and centers the embed content inside it, so
+  // `usePinCardPlacement`/`placeCardLeft` in annotation-layer.tsx measure the
+  // full stage width via `containerRef` — not just the embed content's own
+  // width — and can place the expanded comment card BESIDE an anchored pin.
+  // A plain `relative` wrapper that shrink-wraps to content was narrower than
+  // `CARD_WIDTH` (288px) for small embeds, which forced the card to clamp
+  // and render on top of a center-anchored pin instead of beside it. Pin
+  // coordinates are unaffected by this: the embed recompute branch measures
+  // the anchored element's rect relative to `containerRect`, so a wider
+  // (but same-origin) container keeps pins in the same on-screen spot — only
+  // the placement math for the card gets more room to work with.
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex h-full w-full min-h-[400px] items-center justify-center">
       <EmbedHtml html={variation.src} embedRef={embedRef} onReady={() => setEmbedReady(true)} />
       {voterId && onCommentSubmit && (
         <AnnotationLayer
