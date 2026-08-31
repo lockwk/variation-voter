@@ -105,7 +105,10 @@ function RailHeader({ onClose }: { onClose: () => void }) {
     <div className="shrink-0 flex items-center justify-between border-b border-[#3F3F46] pb-[7px]">
       <div className="flex items-center gap-1">
         <Target04 aria-hidden="true" className="size-4" color="#E8E8E8" />
-        <span className="text-xs font-semibold tracking-[0.04em] text-[#E8E8E8]">VARIVO 0.1</span>
+        <span className="text-xs font-semibold tracking-[0.04em]">
+          <span className="text-[#E8E8E8]">VARIVO</span>
+          <span className="text-[#00E578]"> EARLY ACCESS</span>
+        </span>
       </div>
       <button
         type="button"
