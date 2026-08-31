@@ -283,11 +283,11 @@ describe("PinCard (mode: expanded) reply composer", () => {
   });
 });
 
-// KEV-185: the header bar's ••• menu replaces the old direct trash-icon
-// button — Delete now lives behind it. Complete/Reopen and Close stay
-// direct icon buttons.
+// KEV-183 follow-up: Delete moved out of the ••• overflow menu (which is
+// gone entirely) and back to a direct icon button, alongside Complete/Reopen
+// and Close.
 describe("PinCard (mode: expanded) header actions", () => {
-  it("opens the ••• menu and requests delete confirmation via its Delete item", async () => {
+  it("requests delete confirmation via the direct Delete button (no menu needed)", async () => {
     const user = userEvent.setup();
     const onRequestDelete = vi.fn();
     const containerRef = { current: null };
@@ -307,11 +307,10 @@ describe("PinCard (mode: expanded) header actions", () => {
       />
     );
 
-    // Delete isn't a direct button anymore — only reachable via the menu.
-    expect(screen.queryByRole("button", { name: /^delete comment$/i })).not.toBeInTheDocument();
+    // The ••• overflow menu is gone entirely.
+    expect(screen.queryByLabelText(/^more actions$/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText(/^more actions$/i));
-    await user.click(await screen.findByRole("menuitem", { name: /delete/i }));
+    await user.click(screen.getByLabelText(/^delete comment$/i));
 
     expect(onRequestDelete).toHaveBeenCalledTimes(1);
   });

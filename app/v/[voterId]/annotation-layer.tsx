@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ArrowUp, CheckCircle, DotsHorizontal, RefreshCcw01, Trash01, X } from "@untitledui/icons";
-import { Button, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
+import { ArrowUp, CheckCircle, RefreshCcw01, Trash01, X } from "@untitledui/icons";
+import { Button } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import { relativeTimeFrom } from "@/lib/relative-time";
@@ -1226,7 +1226,7 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
  *   card's own padding doesn't bubble up to stage.tsx's "click empty canvas"
  *   deselect handler — this card being open is itself evidence the click
  *   landed on non-empty canvas), the header action bar (Complete/Reopen +
- *   a "•••" menu containing Delete when `canManage`, Close always), the full
+ *   Delete when `canManage`, Close always), the full
  *   reply thread under the root entry, and the always-present, autofocusing
  *   reply composer (KEV-183).
  *
@@ -1333,8 +1333,8 @@ export function PinCard({
         <div className="flex h-8 shrink-0 translate-y-0 items-center justify-end gap-0.5 border-b border-[#373737] px-1.5 opacity-100 transition-[opacity,transform] duration-[190ms] delay-[50ms] ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:-translate-y-1.5">
           {/* Header bar: right-aligned 24×24 action buttons — Close is always
               present (even for non-authors / an archived voter), while
-              Complete/Reopen and the "•••" (Delete) menu only join it when
-              `canManage` is true. This is one of the parts of the card
+              Complete/Reopen and Delete only join it when `canManage` is
+              true. This is one of the parts of the card
               that's actually NEW when a pin goes from previewed to expanded
               (the root entry below is identical to the preview), so it gets
               its own, slightly delayed fade+slide-down entrance — the
@@ -1355,31 +1355,15 @@ export function PinCard({
                   )}
                 </TooltipTrigger>
               </Tooltip>
-              <MenuTrigger>
-                <Button
-                  aria-label="More actions"
-                  className="flex size-6 items-center justify-center rounded-[4px] text-[#FFFFFF80] outline-none hover:bg-white/10 hover:text-[#FFFFFFE6] pressed:bg-white/10"
+              <Tooltip title="Delete" placement="top">
+                <TooltipTrigger
+                  aria-label="Delete comment"
+                  onPress={onRequestDelete}
+                  className="flex size-6 items-center justify-center rounded-[4px] text-[#FFFFFF80] hover:bg-white/10 hover:text-error-primary"
                 >
-                  <DotsHorizontal aria-hidden="true" className="size-4" />
-                </Button>
-                <Popover placement="bottom end" offset={4} className="z-50 outline-none">
-                  <Menu
-                    aria-label="Comment actions"
-                    className="min-w-[140px] rounded-[8px] border border-[#3F3F46] bg-[#2A2A2A] p-1 shadow-lg outline-none"
-                    onAction={(key) => {
-                      if (key === "delete") onRequestDelete();
-                    }}
-                  >
-                    <MenuItem
-                      id="delete"
-                      className="flex cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1.5 text-[13px] text-error-primary outline-none hovered:bg-white/10 focused:bg-white/10"
-                    >
-                      <Trash01 aria-hidden="true" className="size-4" />
-                      Delete
-                    </MenuItem>
-                  </Menu>
-                </Popover>
-              </MenuTrigger>
+                  <Trash01 aria-hidden="true" className="size-4" />
+                </TooltipTrigger>
+              </Tooltip>
             </>
           )}
           <Tooltip title="Close" placement="top">
