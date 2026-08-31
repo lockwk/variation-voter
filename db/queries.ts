@@ -2,14 +2,19 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 import { voters, variations, votes, comments } from "./schema";
-import type { Vote, Variation } from "./schema";
+import type { Vote, Variation, Comment } from "./schema";
 import { newId } from "@/lib/ids";
 import { getStorage } from "@/lib/storage";
 
+// Re-exported so UI code (annotation-layer.tsx, comments-panel.tsx,
+// voter-shell.tsx) can type the server-confirmed comment row a POST/PATCH
+// response carries — importantly including the frozen `seq` pin number
+// (KEV-172 chunk 4) — without reaching into "@/db/schema" directly.
+export type { Comment } from "./schema";
+
 // Postgres' `= NULL` never matches (even other NULLs), so a "does this row
 // belong to this viewer" condition needs isNull() when the viewer is unknown
-// rather than eq(col, null) — used by toggleVote, upsertComment, and
-// getVoterDetail's viewer-vote lookup.
+// rather than eq(col, null) — used by getVoterDetail's viewer-vote lookup.
 function viewerCondition(viewerId: string | null) {
   return viewerId === null ? isNull(votes.viewerId) : eq(votes.viewerId, viewerId);
 }
@@ -111,6 +116,33 @@ export type VariationComment = {
   direction: VoteDirection | null;
   /** True when this comment belongs to the current viewer. */
   isOwn: boolean;
+  /** How this pin is positioned: against a CSS selector, or a raw x/y point. */
+  anchorType: Comment["anchorType"];
+  /** CSS selector to re-resolve the pin's element at render time, when anchorType is "element". */
+  selector: string | null;
+  /** X offset (percentage of the variation frame) for a "point" anchor. */
+  offsetX: number | null;
+  /** Y offset (percentage of the variation frame) for a "point" anchor. */
+  offsetY: number | null;
+  /** Whether this pin is still open or has been marked complete. */
+  status: Comment["status"];
+  /** Frozen 1-based pin number within its variation (KEV-172 chunk 4) — the
+   * first comment on a variation is always 1, the second always 2, etc.,
+   * regardless of deletes elsewhere in the list. See createComment. */
+  seq: number;
+};
+
+/**
+ * The anchor fields needed to create (or optimistically render) a pin
+ * comment — the subset of `VariationComment` the stage annotation layer
+ * (KEV-172 chunk 3) collects when a viewer drops a pin, shared by the
+ * composer's POST body and the optimistic insert in voter-shell.tsx.
+ */
+export type CommentAnchorInput = {
+  anchorType: Comment["anchorType"];
+  selector: string | null;
+  offsetX: number | null;
+  offsetY: number | null;
 };
 
 export type VariationWithAggregates = {
@@ -182,6 +214,12 @@ export async function getVoterDetail(
       createdAt: comments.createdAt,
       direction: votes.direction,
       viewerId: comments.viewerId,
+      anchorType: comments.anchorType,
+      selector: comments.selector,
+      offsetX: comments.offsetX,
+      offsetY: comments.offsetY,
+      status: comments.status,
+      seq: comments.seq,
     })
     .from(comments)
     .innerJoin(variations, eq(variations.id, comments.variationId))
@@ -213,6 +251,12 @@ export async function getVoterDetail(
         createdAt: c.createdAt,
         direction: c.direction,
         isOwn: viewerId !== null && c.viewerId === viewerId,
+        anchorType: c.anchorType,
+        selector: c.selector,
+        offsetX: c.offsetX,
+        offsetY: c.offsetY,
+        status: c.status,
+        seq: c.seq,
       })),
   }));
 
@@ -278,28 +322,79 @@ export async function toggleVote(
 }
 
 /**
- * Creates or updates a viewer's comment on a variation. Comments now live in
- * their own table, independent of whether the viewer has voted, so this
- * always succeeds — a resubmission by the same (variationId, viewerId) pair
- * upserts in place (via the comments_variation_viewer_unique index) rather
- * than creating a duplicate comment.
+ * Creates a new pin comment on a variation. Comments live in their own
+ * table, independent of whether the viewer has voted, so this always
+ * succeeds. Unlike the old one-comment-per-viewer model, a viewer can drop
+ * many pins on the same variation — this always inserts a new row rather
+ * than upserting in place.
  */
-export async function upsertComment(
+export async function createComment(
   db: Database,
-  variationId: string,
-  viewerId: string,
-  input: { comment: string; voterName?: string }
+  input: {
+    variationId: string;
+    viewerId: string;
+    comment: string;
+    voterName?: string;
+    anchorType?: Comment["anchorType"];
+    selector?: string;
+    offsetX?: number;
+    offsetY?: number;
+  }
 ) {
+  // Assigns a frozen, monotonic pin number (KEV-172 chunk 4): "first comment
+  // is #1 forever", never reused even after a delete. neon-http has no
+  // interactive transactions, so this can't be a single atomic "read max + 1,
+  // then insert" — instead it's one race-safe UPDATE...RETURNING that bumps
+  // the variation's own counter (Postgres row-level locking makes two
+  // concurrent bumps on the same row serialize correctly), then an INSERT
+  // using the value that UPDATE returned. If the INSERT then fails, the
+  // bumped counter isn't rolled back — that's an acceptable numbering gap;
+  // what must never happen is two comments sharing (or a comment reusing) a
+  // seq, which this guarantees.
+  const [bumped] = await db
+    .update(variations)
+    .set({ commentSeq: sql`${variations.commentSeq} + 1` })
+    .where(eq(variations.id, input.variationId))
+    .returning({ commentSeq: variations.commentSeq });
+  if (!bumped) {
+    throw new Error(`createComment: no such variation ${input.variationId}`);
+  }
+
   const id = newId();
   const [comment] = await db
     .insert(comments)
-    .values({ id, variationId, viewerId, comment: input.comment, voterName: input.voterName })
-    .onConflictDoUpdate({
-      target: [comments.variationId, comments.viewerId],
-      set: input,
-    })
+    .values({ id, seq: bumped.commentSeq, ...input })
     .returning();
   return comment;
+}
+
+/**
+ * Marks a pin comment open/complete. Scoped to the comment's original
+ * author (id + viewerId) so a viewer can only update their own pins; returns
+ * null if no row matches both.
+ */
+export async function updateCommentStatus(
+  db: Database,
+  input: { id: string; viewerId: string; status: Comment["status"] }
+) {
+  const [comment] = await db
+    .update(comments)
+    .set({ status: input.status })
+    .where(and(eq(comments.id, input.id), eq(comments.viewerId, input.viewerId)))
+    .returning();
+  return comment ?? null;
+}
+
+/**
+ * Deletes a pin comment, scoped to its original author (id + viewerId) so a
+ * viewer can only delete their own pins. Returns whether a row was deleted.
+ */
+export async function deleteComment(db: Database, input: { id: string; viewerId: string }) {
+  const deleted = await db
+    .delete(comments)
+    .where(and(eq(comments.id, input.id), eq(comments.viewerId, input.viewerId)))
+    .returning({ id: comments.id });
+  return deleted.length > 0;
 }
 
 export async function purgeExpiredAndArchivedVoters(db: Database, now: Date, archiveGraceMs: number) {

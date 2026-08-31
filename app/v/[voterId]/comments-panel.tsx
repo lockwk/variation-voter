@@ -1,74 +1,70 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowUp, ThumbsDown, ThumbsUp } from "@untitledui/icons";
+import { CheckCircle, RefreshCcw01, Trash01 } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 import { relativeTimeFrom } from "@/lib/relative-time";
+import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
 import { useScrollFade, SCROLL_FADE_STYLE } from "./use-scroll-fade";
 import type { VariationComment, VariationWithAggregates } from "@/db/queries";
 
+// KEV-172 chunk 4: this panel is a "pin tracker" for the selected variation's
+// comments — open pins render prominently, completed ones dim into a section
+// below, and each row (for its own author) carries a complete/reopen toggle
+// and a delete action.
+//
+// KEV-172 (all-kinds-use-pins pass): the old plain-text "Your name" +
+// "Add a comment about <title>" composer that used to live here for
+// `url`/`embed` variations is gone — every variation kind now places comments
+// exclusively by clicking a pin onto the stage (annotation-layer.tsx), so
+// this panel is purely a read/manage surface, never a place to author a new
+// comment. The pin composer's own name field (annotation-layer.tsx's
+// PinComposer) already covers name capture, so nothing is lost.
+//
+// Delete itself just requests confirmation (onRequestDeleteComment) — the
+// confirmation modal is shared with annotation-layer.tsx's pin card and lives
+// one level up in voter-shell.tsx (see components/application/confirm-dialog.tsx).
 export function CommentsPanel({
-  voterId,
   variation,
-  voterStatus,
-  onCommentSubmit,
+  commentError,
+  selectedPinId,
+  onSelectPin,
+  onToggleCommentStatus,
+  onRequestDeleteComment,
 }: {
-  voterId: string;
   variation: VariationWithAggregates | null;
-  voterStatus: "active" | "archived";
-  onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
+  /** A failed complete/delete (KEV-172 chunk 4), mirroring the stage's vote-error banner. */
+  commentError?: string | null;
+  /** The comment id most recently selected (row click, or a pin click on the
+   * stage) — a sticky selection, echoed back so that row can show itself as
+   * selected (KEV-172 polish pass, item 1). */
+  selectedPinId?: string | null;
+  /** Selects (or, if already selected, deselects) the given pin — shared
+   * with the stage's pin click handler via voter-shell.tsx's single
+   * selectPin toggle (KEV-172 polish pass, item 1). */
+  onSelectPin?: (commentId: string) => void;
+  onToggleCommentStatus?: (variationId: string, commentId: string, status: "open" | "complete") => void;
+  /** Opens the shared delete-confirmation modal (voter-shell.tsx), scoped to
+   * this comment — a row no longer confirms/deletes inline. */
+  onRequestDeleteComment?: (variationId: string, commentId: string) => void;
 }) {
-  const [name, setName] = useState("");
-  const [comment, setComment] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [listRef, showFade] = useScrollFade<HTMLUListElement>([variation?.comments.length ?? 0]);
 
-  // A draft comment is scoped to whichever variation it was typed for — carrying
-  // it across a switch would risk posting "meant for A" onto variation B. The
-  // name is kept (a real visitor's name doesn't change between variations).
-  // Resetting during render (React's "adjusting state when a prop changes"
-  // pattern) rather than in an effect avoids an extra post-mount render pass.
-  const [trackedVariationId, setTrackedVariationId] = useState(variation?.id ?? null);
-  if ((variation?.id ?? null) !== trackedVariationId) {
-    setTrackedVariationId(variation?.id ?? null);
-    setComment("");
-    setError(null);
-  }
+  const openPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "open")) : [];
+  const completedPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "complete")) : [];
+  const hasAnyPins = openPins.length > 0 || completedPins.length > 0;
 
-  // Commenting no longer requires having voted — it's only locked when the
-  // voter is archived (see route.ts's findActiveVariationError) or there's no
-  // selected variation to comment on.
-  const locked = voterStatus === "archived" || !variation;
-  // The send button's enabled look (design node 28Z-0) tracks whether there's
-  // actually something to submit, not just whether the composer is unlocked.
-  const canSubmit = !locked && !isSubmitting && comment.trim().length > 0;
-
-  async function submit() {
-    if (!variation || locked || isSubmitting) return;
-    const trimmed = comment.trim();
-    // Empty comment does nothing to submit.
-    if (!trimmed) return;
-
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/voters/${voterId}/variations/${variation.id}/comments`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ comment: trimmed, voterName: name.trim() || undefined }),
-      });
-      if (!response.ok) {
-        setError("Couldn't save your comment. Please try again.");
-        return;
-      }
-      onCommentSubmit(variation.id, trimmed, name.trim() || null);
-      setComment("");
-    } catch {
-      setError("Couldn't save your comment. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+  function rowProps(item: VariationComment, nextStatus: "open" | "complete") {
+    return {
+      comment: item,
+      isSelected: selectedPinId === item.id,
+      onSelect: () => onSelectPin?.(item.id),
+      onRequestDelete: () => {
+        if (variation) onRequestDeleteComment?.(variation.id, item.id);
+      },
+      onToggleStatus: () => {
+        if (variation) onToggleCommentStatus?.(variation.id, item.id, nextStatus);
+      },
+    };
   }
 
   return (
@@ -77,62 +73,26 @@ export function CommentsPanel({
         <h2 className="text-sm font-semibold text-[#E8E8E8]">Comments</h2>
       </div>
 
-      <div
-        className={cx("shrink-0 flex flex-col gap-0.5 rounded-lg", locked && "opacity-50")}
-        aria-disabled={locked}
-      >
-        <div className="flex h-12 items-center rounded-t-lg bg-[#2B2B2B] py-2 pl-3 pr-2">
-          <input
-            aria-label="Your name (optional)"
-            placeholder="Your name (optional)"
-            value={name}
-            disabled={locked}
-            onChange={(event) => setName(event.target.value)}
-            className="w-full min-w-0 bg-transparent text-sm text-[#E8E8E8] outline-none placeholder:text-[#A1A1AA] disabled:cursor-not-allowed"
-          />
-        </div>
-        <div className="flex h-12 items-center gap-2 rounded-b-lg bg-[#2B2B2B] py-2 pl-3 pr-2">
-          <input
-            aria-label={`Add a comment about ${variation?.title ?? "this variation"}`}
-            placeholder={`Add a comment about ${variation?.title ?? "this variation"}`}
-            value={comment}
-            disabled={locked}
-            onChange={(event) => setComment(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") submit();
-            }}
-            className="min-w-0 flex-1 bg-transparent text-sm text-[#E8E8E8] outline-none placeholder:text-[#A1A1AA] disabled:cursor-not-allowed"
-          />
-          <button
-            type="button"
-            aria-label="Send comment"
-            disabled={!canSubmit}
-            onClick={submit}
-            // Constant raised bevel in every state (disabled + enabled) as INSET
-            // box-shadows — never changes the button's size and never "pops" in;
-            // only the background color transitions between states.
-            // Top-highlight alpha is intentionally dimmer than the vote buttons'
-            // (#FFFFFF40 vs #FFFFFF80): this button's disabled state sits on a
-            // dark background, where the brighter highlight read too hot. Don't
-            // "helpfully" homogenize these.
-            style={{ boxShadow: "inset 0 0.5px 0 #FFFFFF40, inset 0 -0.5px 0 #0000004D" }}
-            className={cx(
-              "flex size-8 shrink-0 items-center justify-center rounded-[4px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed",
-              canSubmit ? "bg-[#E8E8E8]" : "bg-[#52525B]"
-            )}
-          >
-            <ArrowUp aria-hidden="true" className="size-4" color="#2B2B2B" />
-          </button>
-        </div>
-      </div>
-      {error && <p className="shrink-0 text-xs text-error-primary">{error}</p>}
+      {commentError && <p className="shrink-0 text-xs text-error-primary">{commentError}</p>}
 
       <div className="relative flex-1 min-h-0">
-        <ul ref={listRef} className="flex h-full flex-col gap-6 overflow-y-auto scrollbar-hide">
-          {!variation || variation.comments.length === 0 ? (
+        <ul ref={listRef} className="flex h-full flex-col gap-4 overflow-y-auto scrollbar-hide">
+          {!variation || !hasAnyPins ? (
             <li className="mt-3 text-center text-sm text-[#A1A1AA]">No comments yet.</li>
           ) : (
-            variation.comments.map((item) => <CommentItem key={item.id} comment={item} />)
+            <>
+              {openPins.map((item) => (
+                <CommentRow key={item.id} {...rowProps(item, "complete")} />
+              ))}
+              {completedPins.length > 0 && (
+                <li className="-mb-2 px-3 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]">
+                  Completed
+                </li>
+              )}
+              {completedPins.map((item) => (
+                <CommentRow key={item.id} dimmed {...rowProps(item, "open")} />
+              ))}
+            </>
           )}
         </ul>
         {showFade && (
@@ -141,6 +101,10 @@ export function CommentsPanel({
       </div>
     </div>
   );
+}
+
+function sortBySeq(comments: VariationComment[]): VariationComment[] {
+  return [...comments].sort((a, b) => a.seq - b.seq);
 }
 
 // H2: own comments (including the server-reloaded copy of an optimistically
@@ -152,20 +116,82 @@ function commentDisplayName(comment: VariationComment): string {
   return trimmedName || "Anonymous";
 }
 
-function CommentItem({ comment }: { comment: VariationComment }) {
-  // A comment with no associated vote (the commenter never voted) renders
-  // neutrally — no thumb icon, just the name and text.
-  const DirectionIcon = comment.direction === "up" ? ThumbsUp : comment.direction === "down" ? ThumbsDown : null;
-  const directionColor = comment.direction === "up" ? "#86EFAC" : "#FCA5A5";
-
+function CommentRow({
+  comment,
+  dimmed = false,
+  isSelected,
+  onSelect,
+  onRequestDelete,
+  onToggleStatus,
+}: {
+  comment: VariationComment;
+  dimmed?: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  onRequestDelete: () => void;
+  onToggleStatus: () => void;
+}) {
   return (
-    <li className="flex flex-col gap-3 py-2 pl-3 pr-2">
-      <div className="flex items-center gap-2">
-        {DirectionIcon && <DirectionIcon aria-hidden="true" className="size-4 shrink-0" color={directionColor} />}
-        <span className="truncate text-sm font-medium text-primary">{commentDisplayName(comment)}</span>
-        <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
+    <li className={cx("relative rounded-lg transition-opacity", dimmed && "opacity-50")}>
+      {/* Same "full-bleed button underneath, content layered on top in a
+          pointer-events-none overlay" pattern as variation-list.tsx's row
+          selection — lets the row itself be one click target (select this
+          pin, echoed on the stage — KEV-172 polish pass item 1) while the
+          trailing action icons stay independent clickable targets, without
+          nesting a <button> inside this one. A ring plus `aria-pressed`
+          alongside the background fill means selection isn't conveyed by
+          color alone. */}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={isSelected}
+        aria-label={`Select pin ${comment.seq} on the stage: ${comment.comment}`}
+        className={cx(
+          "absolute inset-0 h-full w-full rounded-lg outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
+          isSelected ? "bg-[#424242] ring-1 ring-inset ring-[#E8E8E8]" : "hover:bg-[#2B2B2B]"
+        )}
+      />
+      <div className="relative flex items-start gap-2 py-2 pl-3 pr-2 pointer-events-none">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121]"
+        >
+          {comment.seq}
+        </span>
+        <div className="min-w-0 flex-1 flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-primary">{commentDisplayName(comment)}</span>
+            <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
+          </div>
+          <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
+        </div>
+        {comment.isOwn && (
+          <div className="pointer-events-auto flex shrink-0 items-center gap-1">
+            <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
+              <TooltipTrigger
+                aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
+                onPress={onToggleStatus}
+                className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
+              >
+                {comment.status === "open" ? (
+                  <CheckCircle aria-hidden="true" className="size-4" />
+                ) : (
+                  <RefreshCcw01 aria-hidden="true" className="size-4" />
+                )}
+              </TooltipTrigger>
+            </Tooltip>
+            <Tooltip title="Delete" placement="top">
+              <TooltipTrigger
+                aria-label="Delete comment"
+                onPress={onRequestDelete}
+                className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-error-primary"
+              >
+                <Trash01 aria-hidden="true" className="size-4" />
+              </TooltipTrigger>
+            </Tooltip>
+          </div>
+        )}
       </div>
-      <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
     </li>
   );
 }

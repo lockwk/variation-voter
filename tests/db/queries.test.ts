@@ -9,7 +9,9 @@ import {
   getVoterDetail,
   castVote,
   toggleVote,
-  upsertComment,
+  createComment,
+  updateCommentStatus,
+  deleteComment,
   purgeExpiredAndArchivedVoters,
   setVariationSrc,
 } from "@/db/queries";
@@ -173,7 +175,7 @@ describe("getVoterDetail", () => {
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     await castVote(db, variation.id, { direction: "up" });
     await castVote(db, variation.id, { direction: "up", viewerId: "commenter-1" });
-    await upsertComment(db, variation.id, "commenter-1", { comment: "great", voterName: "Kevin" });
+    await createComment(db, { variationId: variation.id, viewerId: "commenter-1", comment: "great", voterName: "Kevin" });
     await castVote(db, variation.id, { direction: "down" });
 
     const detail = await getVoterDetail(db, voter.id);
@@ -192,7 +194,7 @@ describe("getVoterDetail", () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
-    await upsertComment(db, variation.id, "viewer-1", { comment: "mine" });
+    await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "mine" });
     await toggleVote(db, variation.id, "viewer-2", "down");
 
     const asViewer1 = await getVoterDetail(db, voter.id, "viewer-1");
@@ -278,18 +280,25 @@ describe("toggleVote", () => {
   });
 });
 
-describe("upsertComment", () => {
+describe("createComment", () => {
   it("creates a comment even when the viewer has no vote on the variation", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
 
-    const comment = await upsertComment(db, variation.id, "viewer-1", {
+    const comment = await createComment(db, {
+      variationId: variation.id,
+      viewerId: "viewer-1",
       comment: "too busy",
       voterName: "Kevin",
     });
 
     expect(comment.comment).toBe("too busy");
     expect(comment.voterName).toBe("Kevin");
+    expect(comment.anchorType).toBe("point");
+    expect(comment.status).toBe("open");
+    expect(comment.selector).toBeNull();
+    expect(comment.offsetX).toBeNull();
+    expect(comment.offsetY).toBeNull();
 
     const detail = await getVoterDetail(db, voter.id);
     expect(detail?.variations[0].up).toBe(0);
@@ -297,17 +306,88 @@ describe("upsertComment", () => {
     expect(detail?.variations[0].comments[0].direction).toBeNull();
   });
 
-  it("upserts rather than duplicating when the same viewer comments again on the same variation", async () => {
+  it("stores an element anchor's selector, and a point anchor's offsets", async () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
 
-    const first = await upsertComment(db, variation.id, "viewer-1", { comment: "first take" });
-    const second = await upsertComment(db, variation.id, "viewer-1", { comment: "revised take" });
+    const elementPin = await createComment(db, {
+      variationId: variation.id,
+      viewerId: "viewer-1",
+      comment: "fix this button",
+      anchorType: "element",
+      selector: "#submit-button",
+    });
+    expect(elementPin.anchorType).toBe("element");
+    expect(elementPin.selector).toBe("#submit-button");
 
-    expect(second.id).toBe(first.id);
+    const pointPin = await createComment(db, {
+      variationId: variation.id,
+      viewerId: "viewer-1",
+      comment: "here",
+      anchorType: "point",
+      offsetX: 42.5,
+      offsetY: 10,
+    });
+    expect(pointPin.anchorType).toBe("point");
+    expect(pointPin.offsetX).toBe(42.5);
+    expect(pointPin.offsetY).toBe(10);
+  });
+
+  it("creates a new row rather than upserting when the same viewer comments again on the same variation", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const first = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "first pin" });
+    const second = await createComment(db, {
+      variationId: variation.id,
+      viewerId: "viewer-1",
+      comment: "second pin",
+    });
+
+    expect(second.id).not.toBe(first.id);
     const detail = await getVoterDetail(db, voter.id);
-    expect(detail?.variations[0].comments).toHaveLength(1);
-    expect(detail?.variations[0].comments[0].comment).toBe("revised take");
+    expect(detail?.variations[0].comments).toHaveLength(2);
+    expect(detail?.variations[0].comments.map((c) => c.comment).sort()).toEqual(["first pin", "second pin"]);
+  });
+
+  // KEV-172 chunk 4: "the first comment on a variation is #1 forever, second
+  // is #2" — seq is a frozen, monotonic, per-variation sequence assigned at
+  // insert time, independent of any other variation's own numbering.
+  describe("seq (frozen pin numbering)", () => {
+    it("assigns 1, 2, 3... in insertion order, scoped per variation", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const variationA = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const variationB = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
+
+      const a1 = await createComment(db, { variationId: variationA.id, viewerId: "v1", comment: "a1" });
+      const a2 = await createComment(db, { variationId: variationA.id, viewerId: "v1", comment: "a2" });
+      // A second variation's own numbering starts fresh at 1 — seq is scoped
+      // per variation, not a global counter.
+      const b1 = await createComment(db, { variationId: variationB.id, viewerId: "v1", comment: "b1" });
+
+      expect(a1.seq).toBe(1);
+      expect(a2.seq).toBe(2);
+      expect(b1.seq).toBe(1);
+    });
+
+    it("never reuses a seq after the comment holding it is deleted", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+      const first = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "first" });
+      const second = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "second" });
+      expect(first.seq).toBe(1);
+      expect(second.seq).toBe(2);
+
+      await deleteComment(db, { id: first.id, viewerId: "v1" });
+      // Deleting #1 must not roll the counter back — the next pin still
+      // gets #3, not a reused #1. (Gaps like 1 -deleted-, 2, 3 are correct.)
+      const third = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "third" });
+      expect(third.seq).toBe(3);
+
+      const detail = await getVoterDetail(db, voter.id);
+      expect(detail?.variations[0].comments.map((c) => c.seq).sort((x, y) => x - y)).toEqual([2, 3]);
+    });
   });
 
   it("reflects the commenter's vote direction when they've also voted", async () => {
@@ -315,7 +395,7 @@ describe("upsertComment", () => {
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     await castVote(db, variation.id, { direction: "up", viewerId: "viewer-1" });
 
-    await upsertComment(db, variation.id, "viewer-1", { comment: "too busy" });
+    await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "too busy" });
 
     const detail = await getVoterDetail(db, voter.id);
     expect(detail?.variations[0].up).toBe(1); // still one vote, not two
@@ -327,7 +407,7 @@ describe("upsertComment", () => {
     const voter = await createVoter(db, { title: "x" });
     const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
-    await upsertComment(db, variation.id, "viewer-1", { comment: "mine" });
+    await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "mine" });
 
     const result = await toggleVote(db, variation.id, "viewer-1", "up");
     expect(result.state).toBe("removed");
@@ -336,6 +416,56 @@ describe("upsertComment", () => {
     expect(detail?.variations[0].comments).toHaveLength(1);
     expect(detail?.variations[0].comments[0].comment).toBe("mine");
     expect(detail?.variations[0].comments[0].direction).toBeNull();
+  });
+});
+
+describe("updateCommentStatus", () => {
+  it("updates the status of the author's own comment", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
+
+    const updated = await updateCommentStatus(db, { id: comment.id, viewerId: "viewer-1", status: "complete" });
+
+    expect(updated?.status).toBe("complete");
+  });
+
+  it("does not update (or return) a comment belonging to a different viewer", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
+
+    const result = await updateCommentStatus(db, { id: comment.id, viewerId: "viewer-2", status: "complete" });
+
+    expect(result).toBeNull();
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].comments[0].status).toBe("open");
+  });
+});
+
+describe("deleteComment", () => {
+  it("deletes the author's own comment and reports success", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
+
+    const deleted = await deleteComment(db, { id: comment.id, viewerId: "viewer-1" });
+
+    expect(deleted).toBe(true);
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].comments).toHaveLength(0);
+  });
+
+  it("does not delete a comment belonging to a different viewer, and reports failure", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
+
+    const deleted = await deleteComment(db, { id: comment.id, viewerId: "viewer-2" });
+
+    expect(deleted).toBe(false);
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].comments).toHaveLength(1);
   });
 });
 

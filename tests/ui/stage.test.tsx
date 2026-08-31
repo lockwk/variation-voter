@@ -88,4 +88,27 @@ describe("Stage", () => {
     expect(screen.queryByText(/current live version/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /thumbs/i })).not.toBeInTheDocument();
   });
+
+  // KEV-172 (all-kinds-use-pins pass): app/image/embed all place comments via
+  // pins now, so the comment-mode toggle shows for all three; `url` is a
+  // cross-origin iframe with no same-document DOM to hit-test and is no
+  // longer creatable at all, so it stays excluded.
+  it("shows the comment-mode toggle for app, image, and embed but not url", async () => {
+    for (const kind of ["app", "image", "embed"] as const) {
+      cleanup();
+      render(
+        <Stage
+          variation={{ ...base, kind, src: kind === "embed" ? "<div>hi</div>" : base.src }}
+          voterId="voter1"
+          voterStatus="active"
+          onCommentSubmit={() => {}}
+        />
+      );
+      expect(await screen.findByLabelText(/^add a comment$/i)).toBeInTheDocument();
+    }
+
+    cleanup();
+    render(<Stage variation={base} voterId="voter1" voterStatus="active" onCommentSubmit={() => {}} />);
+    expect(screen.queryByLabelText(/^add a comment$/i)).not.toBeInTheDocument();
+  });
 });

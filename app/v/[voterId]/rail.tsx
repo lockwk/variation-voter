@@ -7,9 +7,8 @@ import { CommentsPanel } from "./comments-panel";
 import type { VariationWithAggregates, VoteDirection } from "@/db/queries";
 
 // B1/B2: a single fixed-width left rail replaces the old 288px nav-only list —
-// it now stacks branding, sort + variation list, and comments/composer.
+// it now stacks branding, sort + variation list, and the comments pin tracker.
 export function Rail({
-  voterId,
   variations,
   selected,
   selectedId,
@@ -20,11 +19,14 @@ export function Rail({
   votingId,
   voteError,
   voterStatus,
-  onCommentSubmit,
   isOpen,
   onClose,
+  commentError,
+  selectedPinId,
+  onSelectPin,
+  onToggleCommentStatus,
+  onRequestDeleteComment,
 }: {
-  voterId: string;
   variations: VariationWithAggregates[];
   selected: VariationWithAggregates | null;
   selectedId: string | null;
@@ -35,10 +37,20 @@ export function Rail({
   votingId: string | null;
   voteError: string | null;
   voterStatus: "active" | "archived";
-  onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
   /** Whether the nav is open as a mobile drawer (ignored at the `md` breakpoint and up, where it's always visible). */
   isOpen: boolean;
   onClose: () => void;
+  /** Surfaced by a failed complete/delete (KEV-172 chunk 4), mirroring voteError. */
+  commentError?: string | null;
+  /** The pin most recently selected by a row or stage-pin click — a sticky
+   * selection (not a one-shot pulse), echoed back so the matching row can
+   * show itself as selected (KEV-172 polish pass, item 1). */
+  selectedPinId?: string | null;
+  onSelectPin?: (commentId: string) => void;
+  onToggleCommentStatus?: (variationId: string, commentId: string, status: "open" | "complete") => void;
+  /** Opens the shared delete-confirmation modal (voter-shell.tsx), scoped to
+   * this comment — the row itself no longer deletes directly. */
+  onRequestDeleteComment?: (variationId: string, commentId: string) => void;
 }) {
   return (
     <nav
@@ -74,10 +86,12 @@ export function Rail({
           voterStatus={voterStatus}
         />
         <CommentsPanel
-          voterId={voterId}
           variation={selected}
-          voterStatus={voterStatus}
-          onCommentSubmit={onCommentSubmit}
+          commentError={commentError}
+          selectedPinId={selectedPinId}
+          onSelectPin={onSelectPin}
+          onToggleCommentStatus={onToggleCommentStatus}
+          onRequestDeleteComment={onRequestDeleteComment}
         />
       </div>
     </nav>

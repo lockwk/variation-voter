@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Menu02 } from "@untitledui/icons";
-import type { VoterDetail, VoteDirection } from "@/db/queries";
+import { ConfirmDialog } from "@/components/application/confirm-dialog";
+import type { Comment, VoterDetail, VoteDirection } from "@/db/queries";
 import { computeOptimisticVote } from "@/lib/optimistic-vote";
 import { type SortMode } from "./variation-list";
 import { Rail } from "./rail";
@@ -24,7 +25,57 @@ export function VoterShell({
   // against a rapid double-click firing two POSTs for the same vote.
   const [votingId, setVotingId] = useState<string | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
+  // Lifted here (rather than left local to CommentsPanel) so a name entered
+  // in the rail's composer and the stage's pin composer (annotation-layer.tsx,
+  // KEV-172 chunk 3) stay in sync — same viewer, same name, wherever they type it.
+  const [voterName, setVoterName] = useState("");
+  // Surfaces a failed complete/delete the same way voteError does (KEV-172
+  // chunk 4) — both actions roll back their optimistic change on failure and
+  // share this one error slot.
+  const [commentError, setCommentError] = useState<string | null>(null);
+  // The pin a comments-panel.tsx row click or an annotation-layer.tsx pin
+  // click most recently selected (KEV-172 polish pass, item 1) — a *sticky*
+  // selection, not a one-shot pulse: it stays until explicitly toggled off,
+  // replaced by a different selection, or cleared via Esc/an empty-canvas
+  // click. Driving both the panel row's highlight and the stage pin's
+  // emphasis (plus the expanded pin card, item 3) from this single id keeps
+  // them from ever disagreeing about what's selected.
+  const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
+  // The single source of truth for the delete-confirmation modal (replaces
+  // the old per-component inline "Delete?" confirm state in both
+  // comments-panel.tsx and annotation-layer.tsx): whichever comment a
+  // Delete click most recently requested, awaiting confirm/cancel here.
+  // Lifting it to one place means the panel row and the pin card share one
+  // ConfirmDialog instance instead of each rendering — and duplicating the
+  // delete logic behind — their own.
+  const [pendingDeleteComment, setPendingDeleteComment] = useState<{ variationId: string; commentId: string } | null>(
+    null
+  );
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Clicking the already-selected pin/row toggles it off; clicking a
+  // different one replaces the selection outright — there's never more than
+  // one selected pin at a time, so "select a different pin" and "deselect
+  // the old one" are the same operation.
+  function selectPin(commentId: string) {
+    setSelectedPinId((prev) => (prev === commentId ? null : commentId));
+  }
+
+  function deselectPin() {
+    setSelectedPinId(null);
+  }
+
+  // Global Esc dismisses the current selection (and with it, the expanded
+  // pin card) from anywhere on the page, matching the mobile-drawer Esc
+  // handler below.
+  useEffect(() => {
+    if (!selectedPinId) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") deselectPin();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedPinId]);
 
   const selected = variations.find((v) => v.id === selectedId) ?? null;
 
@@ -103,27 +154,107 @@ export function VoterShell({
   // H2: the submitter's own comment prepends immediately with "{name} (You)"
   // (bare "You" with no name) and a "now" timestamp; the server-reloaded copy
   // stays labeled the same way once it comes back marked isOwn.
-  function recordCommentOptimistic(variationId: string, comment: string, voterName: string | null) {
+  //
+  // KEV-172 chunk 3/4: the composer that actually POSTs (comments-panel.tsx
+  // for url/embed's plain comments, annotation-layer.tsx for pins) awaits the
+  // response and calls this with the server's own row — never a
+  // client-guessed one — so the frozen `seq` pin number (chunk 4) shown here
+  // is always the real one the server assigned, not a placeholder that would
+  // have to be silently corrected later.
+  function appendComment(variationId: string, created: Comment) {
     setVariations((prev) =>
       prev.map((v) =>
         v.id === variationId
           ? {
               ...v,
-              comments: [
-                {
-                  id: `optimistic-${Date.now()}`,
-                  comment,
-                  voterName,
-                  createdAt: new Date(),
-                  direction: v.viewerVote ?? null,
-                  isOwn: true,
-                },
-                ...v.comments,
-              ],
+              comments: [{ ...created, direction: v.viewerVote ?? null, isOwn: true }, ...v.comments],
             }
           : v
       )
     );
+  }
+
+  // Shared by toggleCommentStatus/removeComment below: snapshot -> apply
+  // optimistically -> reconcile, mirroring castVote's rollback pattern.
+  // Author-scoping is enforced server-side (403 for someone else's pin), so a
+  // failure here always means "put it back and show the error", never
+  // "retry" — there's no client-side case where a rejected request should be
+  // reissued.
+  async function mutateComment(
+    variationId: string,
+    request: () => Promise<Response>,
+    apply: (comments: VoterDetail["variations"][number]["comments"]) => VoterDetail["variations"][number]["comments"]
+  ) {
+    const variation = variations.find((v) => v.id === variationId);
+    if (!variation) return;
+    const snapshot = variation.comments;
+
+    setCommentError(null);
+    applyVariation(variationId, { comments: apply(snapshot) });
+
+    try {
+      const response = await request();
+      if (!response.ok) {
+        applyVariation(variationId, { comments: snapshot });
+        setCommentError("Couldn't update this comment. Please try again.");
+      }
+    } catch {
+      applyVariation(variationId, { comments: snapshot });
+      setCommentError("Couldn't update this comment. Please try again.");
+    }
+  }
+
+  // Complete toggle (KEV-172 chunk 4): completing removes the pin from the
+  // stage (annotation-layer.tsx only renders status === "open" pins) but
+  // keeps its row in the panel, de-emphasized — this is also how a viewer
+  // reopens one of their own completed pins.
+  function toggleCommentStatus(variationId: string, commentId: string, status: "open" | "complete") {
+    void mutateComment(
+      variationId,
+      () =>
+        fetch(`/api/voters/${voter.id}/variations/${variationId}/comments/${commentId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status }),
+        }),
+      (comments) => comments.map((c) => (c.id === commentId ? { ...c, status } : c))
+    );
+  }
+
+  // Delete (KEV-172 chunk 4): removes the row from both the stage and the
+  // panel. The confirm step now lives in the shared ConfirmDialog below —
+  // by the time this fires, the viewer has already confirmed.
+  function removeComment(variationId: string, commentId: string) {
+    // A deleted pin can't stay "selected" — drop it eagerly rather than
+    // leaving a dangling id that just happens to never match a rendered row
+    // or pin again.
+    setSelectedPinId((prev) => (prev === commentId ? null : prev));
+    void mutateComment(
+      variationId,
+      () =>
+        fetch(`/api/voters/${voter.id}/variations/${variationId}/comments/${commentId}`, {
+          method: "DELETE",
+        }),
+      (comments) => comments.filter((c) => c.id !== commentId)
+    );
+  }
+
+  // Both delete triggers (comments-panel.tsx's row action, annotation-layer.tsx's
+  // selected pin card action) call this instead of deleting directly — it just
+  // opens the shared confirmation modal below, scoped to that one comment.
+  function requestDeleteComment(variationId: string, commentId: string) {
+    setPendingDeleteComment({ variationId, commentId });
+  }
+
+  function confirmDeleteComment() {
+    if (!pendingDeleteComment) return;
+    const { variationId, commentId } = pendingDeleteComment;
+    setPendingDeleteComment(null);
+    removeComment(variationId, commentId);
+  }
+
+  function cancelDeleteComment() {
+    setPendingDeleteComment(null);
   }
 
   return (
@@ -137,7 +268,6 @@ export function VoterShell({
         />
       )}
       <Rail
-        voterId={voter.id}
         variations={variations}
         selected={selected}
         selectedId={selectedId}
@@ -148,9 +278,13 @@ export function VoterShell({
         votingId={votingId}
         voteError={voteError}
         voterStatus={voter.status}
-        onCommentSubmit={recordCommentOptimistic}
         isOpen={isNavOpen}
         onClose={closeNav}
+        commentError={commentError}
+        selectedPinId={selectedPinId}
+        onSelectPin={selectPin}
+        onToggleCommentStatus={toggleCommentStatus}
+        onRequestDeleteComment={requestDeleteComment}
       />
       <div className="flex flex-1 min-w-0 flex-col">
         <button
@@ -163,8 +297,30 @@ export function VoterShell({
           <Menu02 className="size-5 shrink-0" />
           <span className="truncate font-medium">{voter.title}</span>
         </button>
-        <Stage variation={selected} />
+        <Stage
+          variation={selected}
+          voterId={voter.id}
+          voterStatus={voter.status}
+          voterName={voterName}
+          onVoterNameChange={setVoterName}
+          onCommentSubmit={appendComment}
+          selectedPinId={selectedPinId}
+          onSelectPin={selectPin}
+          onDeselectPin={deselectPin}
+          onToggleCommentStatus={toggleCommentStatus}
+          onRequestDeleteComment={requestDeleteComment}
+        />
       </div>
+      <ConfirmDialog
+        isOpen={pendingDeleteComment !== null}
+        title="Delete comment"
+        message="Are you sure you want to delete this comment? This cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        isDestructive
+        onConfirm={confirmDeleteComment}
+        onClose={cancelDeleteComment}
+      />
     </div>
   );
 }

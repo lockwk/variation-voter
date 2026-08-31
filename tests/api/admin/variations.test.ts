@@ -33,8 +33,23 @@ describe("POST /api/admin/voters/:voterId/variations", () => {
     expect(response.status).toBe(400);
   });
 
+  // KEV-172: new "url" variations can no longer be created — they're a
+  // cross-origin iframe with no same-document DOM to hit-test, so they can't
+  // support pinned comments the way every other kind now requires. Existing
+  // rows are untouched (the DB enum still has "url"), only creation is blocked.
+  it("rejects a url variation", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const response = await POST(
+      addVariationRequest({ title: "Live default", kind: "url", src: "https://preview.example/a" }),
+      { params: Promise.resolve({ voterId: voter.id }) }
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body.error)).toMatch(/no longer supported/i);
+  });
+
   it("404s when the voter doesn't exist", async () => {
-    const response = await POST(addVariationRequest({ title: "A", kind: "url", src: "https://a" }), {
+    const response = await POST(addVariationRequest({ title: "A", kind: "image", src: "https://a.png" }), {
       params: Promise.resolve({ voterId: "does-not-exist" }),
     });
     expect(response.status).toBe(404);
@@ -43,7 +58,7 @@ describe("POST /api/admin/voters/:voterId/variations", () => {
   it("adds a variation to the given voter", async () => {
     const voter = await createVoter(db, { title: "x" });
     const response = await POST(
-      addVariationRequest({ title: "Live default", kind: "url", src: "https://preview.example/a" }),
+      addVariationRequest({ title: "Live default", kind: "image", src: "https://preview.example/a.png" }),
       { params: Promise.resolve({ voterId: voter.id }) }
     );
     expect(response.status).toBe(201);

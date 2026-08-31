@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { commentSchema } from "@/lib/validation";
-import { upsertComment } from "@/db/queries";
+import { createComment } from "@/db/queries";
 import { findActiveVariationError, resolveViewerId } from "../_shared";
 
 export async function POST(
@@ -20,6 +20,19 @@ export async function POST(
   }
 
   const viewerId = resolveViewerId(request);
-  const comment = await upsertComment(db, variationId, viewerId, parsed.data);
-  return NextResponse.json({ comment });
+  const { comment, voterName, anchorType, selector, offsetX, offsetY } = parsed.data;
+  const created = await createComment(db, {
+    variationId,
+    viewerId,
+    comment,
+    voterName,
+    anchorType,
+    selector: selector ?? undefined,
+    offsetX: offsetX ?? undefined,
+    offsetY: offsetY ?? undefined,
+  });
+  // A new pin comment is a genuinely new resource, so 201 (mirrors the votes
+  // route's "added" case) rather than the bare 200 this handler used before
+  // anchor support landed.
+  return NextResponse.json({ comment: created }, { status: 201 });
 }
