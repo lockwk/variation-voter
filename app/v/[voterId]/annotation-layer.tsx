@@ -1125,7 +1125,15 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    // Resize immediately after focusing, on mount: the textarea starts life
+    // at the browser's default empty `rows={1}` height, which is ~1px taller
+    // than its settled `scrollHeight` once real content-box metrics are in
+    // play. Without this, the FIRST keystroke's `onChange` → `resize()` is
+    // what does that initial snap, visibly collapsing the card by that 1px
+    // right as someone starts typing. Running `resize()` here settles the
+    // height before any keystroke, so typing never causes a jump.
     textareaRef.current?.focus();
+    resize();
   }, []);
 
   function resize() {
@@ -1173,7 +1181,7 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
             void submit();
           }
         }}
-        className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-[13px] leading-5 text-[#FFFFFFE6] outline-none placeholder:text-xs placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[#427FD8]"
+        className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-[13px] leading-5 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[#427FD8]"
       />
       <button
         type="button"

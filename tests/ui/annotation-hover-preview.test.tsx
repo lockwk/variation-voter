@@ -210,6 +210,37 @@ describe("PinCard (mode: expanded) reply composer", () => {
     expect(screen.getByLabelText(/^send reply$/i)).toBeDisabled();
   });
 
+  // KEV-183 follow-up: the textarea used to snap from the browser's default
+  // empty `rows={1}` height down to its settled `scrollHeight` on the FIRST
+  // keystroke's `onChange` → `resize()`, visibly collapsing the card by that
+  // ~1px difference right as someone started typing. The fix runs `resize()`
+  // once on mount (alongside the existing autofocus effect) so the height is
+  // already settled before any keystroke. jsdom can't measure real pixel
+  // heights (`scrollHeight` is always 0 there), so this can't assert an
+  // actual pixel value — it instead asserts the mechanism: `resize()` (via
+  // its `el.style.height` side effect) has already run by the time the
+  // textarea mounts, with zero keystrokes typed.
+  it("settles the reply textarea's height on mount, before any keystroke", async () => {
+    renderExpanded();
+    const textarea = await screen.findByLabelText(/^reply$/i);
+    // Before the fix, `style.height` is never touched until the first
+    // `onChange` fires — it would still be "" here. After the fix,
+    // `resize()` has already run once on mount, setting it (jsdom's
+    // scrollHeight is 0, so the settled value is "0px").
+    expect(textarea).toHaveStyle({ height: "0px" });
+  });
+
+  // Part of the same 1px-collapse fix: the placeholder used to render at a
+  // smaller `text-xs` (12px) than typed text (`text-[13px]`), so the two
+  // states weren't pixel-identical. The placeholder now inherits the
+  // textarea's own 13px so nothing shifts vertically when typing replaces it.
+  it("renders the reply placeholder at the same size as typed text (no separate text-xs override)", async () => {
+    renderExpanded();
+    const textarea = await screen.findByLabelText(/^reply$/i);
+    expect(textarea.className).not.toMatch(/placeholder:text-xs\b/);
+    expect(textarea.className).toContain("text-[13px]");
+  });
+
   it("submits the trimmed reply text on Send and clears the textarea once it resolves", async () => {
     const user = userEvent.setup();
     const onReplySubmit = vi.fn().mockResolvedValue(true);
