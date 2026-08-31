@@ -633,6 +633,7 @@ export function AnnotationLayer({
         <PinComposer
           x={draft.x}
           y={draft.y}
+          containerRef={containerRef}
           voterName={voterName}
           onVoterNameChange={onVoterNameChange}
           submitting={submitting}
@@ -651,6 +652,7 @@ export function AnnotationLayer({
 function PinComposer({
   x,
   y,
+  containerRef,
   voterName,
   onVoterNameChange,
   submitting,
@@ -660,6 +662,7 @@ function PinComposer({
 }: {
   x: number;
   y: number;
+  containerRef: RefObject<HTMLDivElement | null>;
   voterName: string;
   onVoterNameChange: (name: string) => void;
   submitting: boolean;
@@ -669,6 +672,19 @@ function PinComposer({
 }) {
   const [comment, setComment] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Reading a ref's `.current` during render is disallowed (react-hooks/refs)
+  // — measure the container's width in an effect instead, same as
+  // SelectedPinCard does below, and keep it current across a stage resize.
+  const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    function measure() {
+      setContainerWidth(containerRef.current?.getBoundingClientRect().width);
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [containerRef]);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -689,12 +705,23 @@ function PinComposer({
 
   const canSubmit = comment.trim().length > 0 && !submitting;
 
+  const left = clampComposerLeft(x, containerWidth);
+  // Prefer floating above the click point (same as below); flip below it
+  // when there isn't enough room above so the composer never clips off the
+  // stage's top edge. Reuses SelectedPinCard's own estimated-height/gap
+  // constants below — this popover is roughly the same size, so a second,
+  // near-duplicate estimate wouldn't buy anything.
+  const showBelow = y < CARD_ESTIMATED_HEIGHT + CARD_GAP;
+
   return (
     <div
       role="dialog"
       aria-label="Add a comment"
-      style={{ left: x, top: y }}
-      className="pointer-events-auto absolute z-30 flex w-64 -translate-y-[calc(100%+12px)] flex-col gap-2 rounded-lg border border-[#3F3F46] bg-[#2B2B2B] p-3 shadow-lg"
+      style={{ left, top: y }}
+      className={cx(
+        "pointer-events-auto absolute z-30 flex w-64 flex-col gap-2 rounded-lg border border-[#3F3F46] bg-[#2B2B2B] p-3 shadow-lg",
+        showBelow ? "translate-y-[12px]" : "-translate-y-[calc(100%+12px)]"
+      )}
     >
       <input
         aria-label="Your name (optional)"
@@ -752,7 +779,8 @@ function PinComposer({
   );
 }
 
-const CARD_WIDTH = 288; // matches w-72 below
+const CARD_WIDTH = 288; // matches w-72 below (SelectedPinCard)
+const COMPOSER_WIDTH = 256; // matches w-64 above (PinComposer)
 const CARD_GUTTER = 8;
 const CARD_ESTIMATED_HEIGHT = 180;
 const CARD_GAP = 12;
@@ -768,6 +796,22 @@ function clampCardLeft(pinX: number, containerWidth: number | undefined): number
   const min = half + CARD_GUTTER;
   const max = containerWidth - half - CARD_GUTTER;
   if (max < min) return containerWidth / 2; // container narrower than the card — just center it.
+  return Math.min(Math.max(pinX, min), max);
+}
+
+/**
+ * Keeps the composer's left edge within `containerWidth` (falling back to
+ * the click's raw x when the container hasn't been measured yet) rather than
+ * letting its right edge run past the stage's right edge. Unlike
+ * `clampCardLeft` above, PinComposer isn't center-anchored (no
+ * `-translate-x`) — it anchors its own left edge at the click's x — so this
+ * clamps the left edge directly instead of a center point.
+ */
+function clampComposerLeft(pinX: number, containerWidth: number | undefined): number {
+  if (!containerWidth) return pinX;
+  const min = CARD_GUTTER;
+  const max = containerWidth - COMPOSER_WIDTH - CARD_GUTTER;
+  if (max < min) return min; // container narrower than the composer — just left-align it.
   return Math.min(Math.max(pinX, min), max);
 }
 
