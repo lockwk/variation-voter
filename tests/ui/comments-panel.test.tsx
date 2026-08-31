@@ -45,6 +45,7 @@ function makeComment(overrides: Partial<VariationComment>): VariationComment {
     offsetY: null,
     status: "open",
     seq: 1,
+    parentCommentId: null,
     ...overrides,
   };
 }

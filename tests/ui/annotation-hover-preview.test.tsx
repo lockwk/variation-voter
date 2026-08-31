@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { useRef } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { AnnotationLayer, PinCard } from "@/app/v/[voterId]/annotation-layer";
 import type { VariationComment } from "@/db/queries";
@@ -34,6 +35,7 @@ function makeComment(overrides: Partial<VariationComment> = {}): VariationCommen
     offsetY: 0.5,
     status: "open",
     seq: 1,
+    parentCommentId: null,
     ...overrides,
   };
 }
@@ -53,6 +55,7 @@ describe("PinCard (mode: preview)", () => {
     const { container } = render(
       <PinCard
         comment={makeComment()}
+        replies={[]}
         pinX={100}
         pinY={100}
         containerRef={containerRef}
@@ -75,6 +78,8 @@ describe("PinCard (mode: preview)", () => {
     // `mode: "expanded"` does.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Close comment" })).not.toBeInTheDocument();
+    // KEV-183: preview mode never renders the reply composer either.
+    expect(screen.queryByLabelText(/^reply$/i)).not.toBeInTheDocument();
   });
 });
 
@@ -153,5 +158,154 @@ describe("AnnotationLayer hover/focus preview", () => {
     // Locks in the mode split at the layer level too: the selected pin's
     // card renders the header action bar (Close is always present).
     expect(screen.getByRole("button", { name: "Close comment" })).toBeInTheDocument();
+  });
+});
+
+// KEV-183: the expanded PinCard's always-present reply composer. Rendered
+// directly (not through AnnotationLayer) the same way the "PinCard (mode:
+// preview)" describe block above does — these assertions are about the
+// composer's own behavior, independent of pin placement/selection wiring.
+describe("PinCard (mode: expanded) reply composer", () => {
+  function renderExpanded(overrides: { replies?: VariationComment[]; onReplySubmit?: (text: string) => Promise<boolean> } = {}) {
+    const containerRef = { current: null };
+    return render(
+      <PinCard
+        comment={makeComment()}
+        replies={overrides.replies ?? []}
+        pinX={100}
+        pinY={100}
+        containerRef={containerRef}
+        mode="expanded"
+        canManage={true}
+        onClose={() => {}}
+        onToggleStatus={() => {}}
+        onRequestDelete={() => {}}
+        onReplySubmit={overrides.onReplySubmit ?? (async () => true)}
+      />
+    );
+  }
+
+  // KEV-183 core requirement: the reply box autofocuses as soon as the card
+  // opens, with no extra click needed.
+  it("autofocuses the reply textarea when the card opens", async () => {
+    renderExpanded();
+    const textarea = await screen.findByLabelText(/^reply$/i);
+    await waitFor(() => expect(textarea).toHaveFocus());
+  });
+
+  it("renders the reply thread beneath the root entry, oldest first", () => {
+    renderExpanded({
+      replies: [
+        makeComment({ id: "r1", comment: "first reply", voterName: "Sam", parentCommentId: "c1" }),
+        makeComment({ id: "r2", comment: "second reply", voterName: "Robin", parentCommentId: "c1" }),
+      ],
+    });
+    expect(screen.getByText("Looks great here")).toBeInTheDocument();
+    expect(screen.getByText("first reply")).toBeInTheDocument();
+    expect(screen.getByText("second reply")).toBeInTheDocument();
+  });
+
+  it("disables Send while the reply textarea is empty", () => {
+    renderExpanded();
+    expect(screen.getByLabelText(/^send reply$/i)).toBeDisabled();
+  });
+
+  it("submits the trimmed reply text on Send and clears the textarea once it resolves", async () => {
+    const user = userEvent.setup();
+    const onReplySubmit = vi.fn().mockResolvedValue(true);
+    renderExpanded({ onReplySubmit });
+
+    const textarea = screen.getByLabelText(/^reply$/i);
+    await user.type(textarea, "  a new reply  ");
+    await user.click(screen.getByLabelText(/^send reply$/i));
+
+    expect(onReplySubmit).toHaveBeenCalledWith("a new reply");
+    await waitFor(() => expect(textarea).toHaveValue(""));
+  });
+
+  it("submits on Enter (not Shift+Enter, which inserts a newline instead)", async () => {
+    const user = userEvent.setup();
+    const onReplySubmit = vi.fn().mockResolvedValue(true);
+    renderExpanded({ onReplySubmit });
+
+    const textarea = screen.getByLabelText(/^reply$/i);
+    await user.type(textarea, "shift{Shift>}{Enter}{/Shift}line two");
+    expect(onReplySubmit).not.toHaveBeenCalled();
+    expect(textarea).toHaveValue("shift\nline two");
+
+    await user.type(textarea, "{Enter}");
+    expect(onReplySubmit).toHaveBeenCalledWith("shift\nline two");
+  });
+
+  it("keeps the typed text in place when the reply POST fails", async () => {
+    const user = userEvent.setup();
+    const onReplySubmit = vi.fn().mockResolvedValue(false);
+    renderExpanded({ onReplySubmit });
+
+    const textarea = screen.getByLabelText(/^reply$/i);
+    await user.type(textarea, "will fail");
+    await user.click(screen.getByLabelText(/^send reply$/i));
+
+    expect(onReplySubmit).toHaveBeenCalledWith("will fail");
+    await waitFor(() => expect(screen.getByLabelText(/^send reply$/i)).not.toBeDisabled());
+    expect(textarea).toHaveValue("will fail");
+  });
+});
+
+// KEV-185: the header bar's ••• menu replaces the old direct trash-icon
+// button — Delete now lives behind it. Complete/Reopen and Close stay
+// direct icon buttons.
+describe("PinCard (mode: expanded) header actions", () => {
+  it("opens the ••• menu and requests delete confirmation via its Delete item", async () => {
+    const user = userEvent.setup();
+    const onRequestDelete = vi.fn();
+    const containerRef = { current: null };
+    render(
+      <PinCard
+        comment={makeComment()}
+        replies={[]}
+        pinX={100}
+        pinY={100}
+        containerRef={containerRef}
+        mode="expanded"
+        canManage={true}
+        onClose={() => {}}
+        onToggleStatus={() => {}}
+        onRequestDelete={onRequestDelete}
+        onReplySubmit={async () => true}
+      />
+    );
+
+    // Delete isn't a direct button anymore — only reachable via the menu.
+    expect(screen.queryByRole("button", { name: /^delete comment$/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/^more actions$/i));
+    await user.click(await screen.findByRole("menuitem", { name: /delete/i }));
+
+    expect(onRequestDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the comment complete via the direct Complete button (no menu needed)", async () => {
+    const user = userEvent.setup();
+    const onToggleStatus = vi.fn();
+    const containerRef = { current: null };
+    render(
+      <PinCard
+        comment={makeComment({ status: "open" })}
+        replies={[]}
+        pinX={100}
+        pinY={100}
+        containerRef={containerRef}
+        mode="expanded"
+        canManage={true}
+        onClose={() => {}}
+        onToggleStatus={onToggleStatus}
+        onRequestDelete={() => {}}
+        onReplySubmit={async () => true}
+      />
+    );
+
+    await user.click(screen.getByLabelText(/mark comment complete/i));
+    expect(onToggleStatus).toHaveBeenCalledTimes(1);
   });
 });

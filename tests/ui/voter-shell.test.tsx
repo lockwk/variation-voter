@@ -72,6 +72,7 @@ function makeOwnComment(overrides: Partial<VariationComment> = {}): VariationCom
     offsetY: null,
     status: "open",
     seq: 1,
+    parentCommentId: null,
     ...overrides,
   };
 }
@@ -320,6 +321,7 @@ describe("VoterShell", () => {
             offsetY: body.offsetY ?? 0.5,
             status: "open",
             seq: 1,
+            parentCommentId: null,
             createdAt: new Date().toISOString(),
           },
         }),
