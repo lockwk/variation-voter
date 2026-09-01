@@ -115,7 +115,10 @@ describe("CommentsPanel", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         if (typeof url === "string" && url.startsWith("/api/")) {
-          return new Response(JSON.stringify({ comment: { id: "comment1" } }), { status: 200 });
+          return new Response(
+            JSON.stringify({ comment: { id: "comment1", createdAt: "2024-01-01T00:00:00.000Z" } }),
+            { status: 200 }
+          );
         }
         return realFetch(url, init);
       })
@@ -140,7 +143,11 @@ describe("CommentsPanel", () => {
     );
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
     expect(body).toEqual({ comment: "nice!", voterName: "Kevin" });
-    await vi.waitFor(() => expect(onCommentSubmit).toHaveBeenCalledWith("a", "nice!", "Kevin"));
+    // KEV-90: submit() also passes the real comment id/createdAt from the POST
+    // response, not just (variationId, comment, voterName).
+    await vi.waitFor(() =>
+      expect(onCommentSubmit).toHaveBeenCalledWith("a", "nice!", "Kevin", "comment1", "2024-01-01T00:00:00.000Z")
+    );
     expect(screen.getByLabelText(/add a comment about option a/i)).toHaveValue("");
     expect(screen.getByLabelText(/your name/i)).toHaveValue("Kevin");
   });

@@ -16,7 +16,13 @@ export function CommentsPanel({
   voterId: string;
   variation: VariationWithAggregates | null;
   voterStatus: "active" | "archived";
-  onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
+  onCommentSubmit: (
+    variationId: string,
+    comment: string,
+    voterName: string | null,
+    id: string,
+    createdAt: string | Date
+  ) => void;
 }) {
   const [name, setName] = useState("");
   const [comment, setComment] = useState("");
@@ -62,7 +68,8 @@ export function CommentsPanel({
         setError("Couldn't save your comment. Please try again.");
         return;
       }
-      onCommentSubmit(variation.id, trimmed, name.trim() || null);
+      const { comment: saved } = await response.json();
+      onCommentSubmit(variation.id, trimmed, name.trim() || null, saved.id, saved.createdAt);
       setComment("");
     } catch {
       setError("Couldn't save your comment. Please try again.");

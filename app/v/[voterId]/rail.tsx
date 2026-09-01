@@ -35,7 +35,13 @@ export function Rail({
   votingId: string | null;
   voteError: string | null;
   voterStatus: "active" | "archived";
-  onCommentSubmit: (variationId: string, comment: string, voterName: string | null) => void;
+  onCommentSubmit: (
+    variationId: string,
+    comment: string,
+    voterName: string | null,
+    id: string,
+    createdAt: string | Date
+  ) => void;
   /** Whether the nav is open as a mobile drawer (ignored at the `md` breakpoint and up, where it's always visible). */
   isOpen: boolean;
   onClose: () => void;

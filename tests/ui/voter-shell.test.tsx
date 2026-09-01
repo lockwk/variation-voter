@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { VoterShell } from "@/app/v/[voterId]/voter-shell";
 import type { VoterDetail } from "@/db/queries";
+import type { ReactElement } from "react";
 
 // This project's vitest config sets `globals: false`, so @testing-library/react's
 // implicit auto-cleanup (which detects a global `afterEach`) never registers.
@@ -12,6 +13,13 @@ import type { VoterDetail } from "@/db/queries";
 afterEach(() => {
   cleanup();
 });
+
+// KEV-189: VoterShell now renders its own sonner <Toaster/> internally and
+// calls sonner's `toast()` directly, which works without any provider
+// ancestor — so rendering the component under test no longer needs a wrapper.
+function renderShell(ui: ReactElement) {
+  return render(ui);
+}
 
 function makeVoter(overrides: Partial<VoterDetail> = {}): VoterDetail {
   return {
@@ -76,14 +84,14 @@ function stubApiFetch(handler: (url: string, init?: RequestInit) => Response | P
 
 describe("VoterShell", () => {
   it("selects the first variation by default and shows its stage", () => {
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
     expect(screen.getByTitle("Option A")).toBeInTheDocument();
   });
 
   it("switches the stage and updates the URL when a different variation is clicked", async () => {
     const user = userEvent.setup();
     const replaceStateSpy = vi.spyOn(window.history, "replaceState");
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     // The row's title text is plain, non-interactive markup layered over a
     // full-row selection button (bugfix: the whole row is now the click
@@ -103,7 +111,7 @@ describe("VoterShell", () => {
       async () =>
         new Response(JSON.stringify({ vote: { id: "vote-a", direction: "up" }, state: "added" }), { status: 201 })
     );
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     await user.click(screen.getByRole("button", { name: /thumbs up/i }));
 
@@ -131,7 +139,7 @@ describe("VoterShell", () => {
       }
       return new Response(JSON.stringify({ vote: null, state: "removed" }), { status: 200 });
     });
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     await user.click(screen.getByRole("button", { name: /thumbs up/i }));
     await screen.findByRole("button", { name: /thumbs up, 1 vote$/i });
@@ -157,7 +165,7 @@ describe("VoterShell", () => {
         status: 200,
       });
     });
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     await user.click(screen.getByRole("button", { name: /thumbs up/i }));
     await screen.findByRole("button", { name: /thumbs up, 1 vote$/i });
@@ -170,7 +178,7 @@ describe("VoterShell", () => {
   it("rolls back the optimistic vote and shows an error when the POST fails", async () => {
     const user = userEvent.setup();
     stubApiFetch(async () => new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }));
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     await user.click(screen.getByRole("button", { name: /thumbs up/i }));
 
@@ -189,7 +197,7 @@ describe("VoterShell", () => {
         status: 201,
       });
     });
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     await user.dblClick(screen.getByRole("button", { name: /thumbs up/i }));
 
@@ -197,7 +205,7 @@ describe("VoterShell", () => {
   });
 
   it("disables the selected row's vote buttons and shows a read-only notice for archived voters", () => {
-    render(<VoterShell voter={makeVoter({ status: "archived" })} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter({ status: "archived" })} initialVariationId="a" />);
     expect(screen.getByRole("button", { name: /thumbs up/i })).toBeDisabled();
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
   });
@@ -215,7 +223,7 @@ describe("VoterShell", () => {
       }
       return new Response(JSON.stringify({ comment: { id: "comment-a" } }), { status: 200 });
     });
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     expect(screen.getByLabelText(/add a comment about option a/i)).not.toBeDisabled();
 
@@ -237,7 +245,7 @@ describe("VoterShell", () => {
       async () =>
         new Response(JSON.stringify({ vote: { id: "vote-a", direction: "up" }, state: "added" }), { status: 201 })
     );
-    render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
+    renderShell(<VoterShell voter={makeVoter()} initialVariationId="a" />);
 
     await user.click(screen.getByRole("button", { name: /thumbs up/i }));
     await screen.findByRole("button", { name: /thumbs up, 1 vote$/i });
