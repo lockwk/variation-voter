@@ -154,7 +154,7 @@ export function CommentsPanel({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]"
+                  className="px-3 pt-4 pb-1 text-xs font-semibold text-[#FFFFFF80]"
                 >
                   Completed
                 </motion.li>
