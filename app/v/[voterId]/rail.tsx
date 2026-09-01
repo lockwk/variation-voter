@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "@untitledui/icons";
+import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { VariationList, type SortMode } from "./variation-list";
 import { CommentsPanel } from "./comments-panel";
@@ -55,7 +56,7 @@ export function Rail({
   return (
     <nav
       className={cx(
-        "w-[320px] shrink-0 flex flex-col gap-3 bg-[#212121] pt-2 pb-3 px-3",
+        "w-[320px] shrink-0 flex flex-col gap-3 bg-[#212121] p-3",
         // A2: drop shadow separating the rail from the media pane, in addition to the border.
         "shadow-[0_8px_20px_#00000033]",
         // When closed on mobile, invisible (not just translated off-screen) keeps
@@ -64,7 +65,7 @@ export function Rail({
         isOpen && "translate-x-0 visible"
       )}
     >
-      <RailHeader onClose={onClose} />
+      <RailHeader sortMode={sortMode} onSortModeChange={onSortModeChange} onClose={onClose} />
       {voterStatus === "archived" && (
         <p className="shrink-0 text-xs text-[#A1A1AA]">
           This voter is closed and read-only — voting is disabled.
@@ -80,7 +81,6 @@ export function Rail({
           selectedId={selectedId}
           sortMode={sortMode}
           onSelect={onSelect}
-          onSortModeChange={onSortModeChange}
           onVote={onVote}
           votingId={votingId}
           voterStatus={voterStatus}
@@ -99,24 +99,52 @@ export function Rail({
   );
 }
 
-// C1: fixed VARIVO product wordmark replaces the per-voter title in the rail
+// The "all" mode still sorts by position, but the design renames its
+// displayed tab label to "Ver" (KEV-203) — the SortMode key is unchanged.
+const SORT_LABELS: Record<SortMode, string> = { all: "Ver", new: "New", top: "Top" };
+
+// C1: fixed VERVO product wordmark replaces the per-voter title in the rail
 // header. The mobile-only close button keeps the drawer dismissible.
-// KEV-199: redesigned header row — pixel-grid mark + wordmark on the left,
-// "EARLY ACCESS" (now muted, not brand-green) and the close button grouped
-// on the right so `justify-between` pushes that whole cluster to the edge.
-function RailHeader({ onClose }: { onClose: () => void }) {
+// KEV-203: the sort control (previously owned by VariationList) now lives
+// here, right-aligned alongside the mobile close button — "EARLY ACCESS" is
+// gone and the header no longer carries its own border/padding (the 12px
+// gap to the section below comes from the nav's own `gap-3`, KEV-205).
+export function RailHeader({
+  sortMode,
+  onSortModeChange,
+  onClose,
+}: {
+  sortMode: SortMode;
+  onSortModeChange: (mode: SortMode) => void;
+  onClose: () => void;
+}) {
   return (
-    <div className="shrink-0 flex items-center justify-between border-b border-[#3F3F46] pb-[7px]">
+    <div className="shrink-0 flex items-center justify-between">
       <div className="flex items-center gap-1">
         <LogoMark />
         <span className="font-body text-xs font-semibold tracking-[0.1em] text-[#FFFFFFE6]">
-          VARIVO
+          VERVO
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="font-body text-xs font-semibold tracking-[0.1em] text-[#FFFFFF80]">
-          EARLY ACCESS
-        </span>
+        <ToggleButtonGroup
+          aria-label="Sort by"
+          selectionMode="single"
+          disallowEmptySelection
+          selectedKeys={[sortMode]}
+          onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
+          className="shrink-0 flex items-center gap-0.5"
+        >
+          {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
+            <ToggleButton
+              key={mode}
+              id={mode}
+              className="flex h-6 items-center justify-center rounded-md px-3 py-2 text-xs font-semibold text-[#FFFFFF80] outline-none transition-colors selected:bg-[#424242] selected:text-[#FFFFFFE6] not-selected:hover:bg-[#FFFFFF0D] not-selected:hover:text-[#FFFFFFE6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+            >
+              {SORT_LABELS[mode]}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
         <button
           type="button"
           aria-label="Close menu"
@@ -159,7 +187,7 @@ function LogoMark() {
                 top: y,
                 backgroundColor: LOGO_ACCENT_CELLS[col][row]
                   ? "var(--color-accent)"
-                  : "#161616",
+                  : "#00000080",
               }}
             />
           ))

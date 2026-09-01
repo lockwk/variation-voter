@@ -2,7 +2,6 @@
 
 import { ThumbsUp } from "@untitledui/icons";
 import { AnimatePresence, motion } from "motion/react";
-import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { useScrollFade, SCROLL_FADE_STYLE } from "./use-scroll-fade";
 import type { VariationWithAggregates, VoteDirection } from "@/db/queries";
@@ -19,16 +18,11 @@ export function sortVariations(
   return copy.sort((a, b) => b.score - a.score);
 }
 
-// The "all" mode still sorts by position, but the design renames its
-// displayed tab label to "Version" (D2) — the SortMode key is unchanged.
-const SORT_LABELS: Record<SortMode, string> = { all: "Version", new: "New", top: "Top" };
-
 export function VariationList({
   variations,
   selectedId,
   sortMode,
   onSelect,
-  onSortModeChange,
   onVote,
   votingId,
   voterStatus,
@@ -37,7 +31,6 @@ export function VariationList({
   selectedId: string | null;
   sortMode: SortMode;
   onSelect: (id: string) => void;
-  onSortModeChange: (mode: SortMode) => void;
   /** Casts/toggles a vote for the currently-selected row's inline control (E3/F3). */
   onVote: (variationId: string, direction: VoteDirection) => void;
   /** The variation id with an in-flight vote request, if any — disables its controls. */
@@ -60,25 +53,7 @@ export function VariationList({
     // of the list+comments region (see rail.tsx) — never reserving empty
     // space below a short list, but never exceeding half when long. Comments
     // (flex-1 in rail.tsx) always absorbs whatever this doesn't use.
-    <div className="flex flex-initial min-h-0 max-h-[50%] flex-col gap-2">
-      <ToggleButtonGroup
-        aria-label="Sort by"
-        selectionMode="single"
-        disallowEmptySelection
-        selectedKeys={[sortMode]}
-        onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
-        className="shrink-0 flex items-center gap-1"
-      >
-        {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
-          <ToggleButton
-            key={mode}
-            id={mode}
-            className="flex h-6 items-center justify-center rounded-md px-3 py-2 text-xs font-semibold text-[#FFFFFF80] outline-none transition-colors selected:bg-[#424242] selected:text-[#FFFFFFE6] not-selected:hover:bg-[#FFFFFF0D] not-selected:hover:text-[#FFFFFFE6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-          >
-            {SORT_LABELS[mode]}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
+    <div className="flex flex-initial min-h-0 max-h-[50%] flex-col">
       {/* flex-auto (basis: auto, not 0) so this contributes its natural
           content height when the list above is hugging content — a
           flex-1/basis-0 child here would collapse to zero height instead of
