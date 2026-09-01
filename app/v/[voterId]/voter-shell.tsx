@@ -176,6 +176,37 @@ export function VoterShell({
     );
   }
 
+  // KEV-183: posts a flat-thread reply from the expanded pin card's always-
+  // present reply composer (annotation-layer.tsx's PinCardReplyInput).
+  // Mirrors appendComment's own "await the POST, then append the server's
+  // row" flow (see its doc comment) rather than inserting a client-guessed
+  // placeholder first — there's no id/seq/createdAt to guess for a reply
+  // either, so there's nothing a true pre-response optimistic insert would
+  // gain here. Resolves `true`/`false` so the reply composer knows whether
+  // to clear its own textarea; a failure surfaces through the same
+  // `commentError` banner toggleCommentStatus/removeComment already share
+  // (nothing was appended, so there's nothing to roll back).
+  async function submitReply(variationId: string, parentCommentId: string, text: string): Promise<boolean> {
+    setCommentError(null);
+    try {
+      const response = await fetch(`/api/voters/${voter.id}/variations/${variationId}/comments`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ comment: text, voterName: voterName.trim() || undefined, parentCommentId }),
+      });
+      if (!response.ok) {
+        setCommentError("Couldn't post your reply. Please try again.");
+        return false;
+      }
+      const { comment: created } = (await response.json()) as { comment: Comment };
+      appendComment(variationId, { ...created, createdAt: new Date(created.createdAt) });
+      return true;
+    } catch {
+      setCommentError("Couldn't post your reply. Please try again.");
+      return false;
+    }
+  }
+
   // Shared by toggleCommentStatus/removeComment below: snapshot -> apply
   // optimistically -> reconcile, mirroring castVote's rollback pattern.
   // Author-scoping is enforced server-side (403 for someone else's pin), so a
@@ -313,6 +344,7 @@ export function VoterShell({
             voterName={voterName}
             onVoterNameChange={setVoterName}
             onCommentSubmit={appendComment}
+            onReplySubmit={submitReply}
             selectedPinId={selectedPinId}
             onSelectPin={selectPin}
             onDeselectPin={deselectPin}

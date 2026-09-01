@@ -43,6 +43,13 @@
       "when": 1787956735429,
       "tag": "0005_quiet_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788208213788,
+      "tag": "0006_normal_bulldozer",
+      "breakpoints": true
     }
   ]
 }

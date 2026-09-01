@@ -46,6 +46,12 @@ export const castVoteSchema = z.object({
 // (0–1) of the variation frame. All anchor fields are optional so legacy
 // callers that only send { comment, voterName } keep working — createComment
 // falls back to the column defaults (anchorType "point", null selector).
+// `parentCommentId` (KEV-183): present only on a reply — flags the request
+// to the POST route as "create a flat-thread reply", not a new pin. Left
+// optional/nullable so every existing root-comment caller (a new pin drop)
+// keeps working unchanged. Flat-threading itself (the parent must be a root,
+// not another reply) can't be validated by zod alone since it needs a DB
+// lookup — that check lives server-side in createReply (db/queries.ts).
 export const commentSchema = z
   .object({
     comment: z.string().trim().min(1).max(1000),
@@ -54,6 +60,7 @@ export const commentSchema = z
     selector: z.string().trim().min(1).optional().nullable(),
     offsetX: z.number().min(0).max(1).optional().nullable(),
     offsetY: z.number().min(0).max(1).optional().nullable(),
+    parentCommentId: z.string().trim().min(1).optional().nullable(),
   })
   .refine((data) => data.anchorType !== "element" || !!data.selector, {
     message: "selector is required when anchorType is 'element'",

@@ -21,6 +21,7 @@ export function Stage({
   voterName,
   onVoterNameChange,
   onCommentSubmit,
+  onReplySubmit,
   selectedPinId,
   onSelectPin,
   onDeselectPin,
@@ -33,6 +34,9 @@ export function Stage({
   voterName?: string;
   onVoterNameChange?: (name: string) => void;
   onCommentSubmit?: (variationId: string, comment: Comment) => void;
+  /** Posts a flat-thread reply (KEV-183) — forwarded straight through to
+   * AnnotationLayer's own prop of the same name; see its doc there. */
+  onReplySubmit?: (variationId: string, parentCommentId: string, text: string) => Promise<boolean>;
   /** The comment id most recently selected — by a comments-panel.tsx row
    * click or a pin click here on the stage (KEV-172 polish pass, item 1) —
    * forwarded down to AnnotationLayer to emphasize/scroll to the matching
@@ -112,6 +116,7 @@ export function Stage({
           voterName={voterName ?? ""}
           onVoterNameChange={onVoterNameChange ?? noop}
           onCommentSubmit={onCommentSubmit}
+          onReplySubmit={onReplySubmit}
           selectedPinId={selectedPinId}
           onSelectPin={onSelectPin}
           onToggleCommentStatus={onToggleCommentStatus}
@@ -149,6 +154,7 @@ function VariationMedia({
   voterName,
   onVoterNameChange,
   onCommentSubmit,
+  onReplySubmit,
   selectedPinId,
   onSelectPin,
   onToggleCommentStatus,
@@ -161,6 +167,7 @@ function VariationMedia({
   voterName: string;
   onVoterNameChange: (name: string) => void;
   onCommentSubmit?: (variationId: string, comment: Comment) => void;
+  onReplySubmit?: (variationId: string, parentCommentId: string, text: string) => Promise<boolean>;
   selectedPinId?: string | null;
   onSelectPin?: (commentId: string) => void;
   onToggleCommentStatus?: (variationId: string, commentId: string, status: "open" | "complete") => void;
@@ -217,6 +224,7 @@ function VariationMedia({
             voterName={voterName}
             onVoterNameChange={onVoterNameChange}
             onCommentSubmit={onCommentSubmit}
+            onReplySubmit={onReplySubmit}
             selectedPinId={selectedPinId}
             onSelectPin={onSelectPin}
             onToggleCommentStatus={onToggleCommentStatus}
@@ -244,6 +252,7 @@ function VariationMedia({
             voterName={voterName}
             onVoterNameChange={onVoterNameChange}
             onCommentSubmit={onCommentSubmit}
+            onReplySubmit={onReplySubmit}
             selectedPinId={selectedPinId}
             onSelectPin={onSelectPin}
             onToggleCommentStatus={onToggleCommentStatus}
@@ -287,6 +296,7 @@ function VariationMedia({
           voterName={voterName}
           onVoterNameChange={onVoterNameChange}
           onCommentSubmit={onCommentSubmit}
+          onReplySubmit={onReplySubmit}
           selectedPinId={selectedPinId}
           onSelectPin={onSelectPin}
           onToggleCommentStatus={onToggleCommentStatus}

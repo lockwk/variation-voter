@@ -172,6 +172,86 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
     );
     expect(response.status).toBe(400);
   });
+
+  // KEV-183: replies POST to this same route, distinguished only by a
+  // `parentCommentId` in the body — no separate route.
+  describe("replies (parentCommentId)", () => {
+    it("accepts a reply to a root comment", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const rootResponse = await postComment(commentRequest("comments", { comment: "root" }, "viewer-1"), {
+        params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+      });
+      const { comment: root } = await rootResponse.json();
+
+      const response = await postComment(
+        commentRequest("comments", { comment: "a reply", parentCommentId: root.id }, "viewer-2"),
+        { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
+      );
+
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      expect(body.comment.comment).toBe("a reply");
+      expect(body.comment.parentCommentId).toBe(root.id);
+
+      // The reply never becomes its own pin, and never bumps the root's
+      // numbering — getVoterDetail still shows exactly one open pin (seq 1).
+      const detail = await getVoterDetail(db, voter.id);
+      const rootComments = detail!.variations[0].comments.filter((c) => c.parentCommentId === null);
+      expect(rootComments).toHaveLength(1);
+      expect(rootComments[0].seq).toBe(1);
+    });
+
+    it("404s when the reply's parent doesn't exist on this variation", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+      const response = await postComment(
+        commentRequest("comments", { comment: "orphan", parentCommentId: "nonexistent-id" }, "viewer-1"),
+        { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
+      );
+      expect(response.status).toBe(400);
+    });
+
+    // Flat-threading enforcement (product decision): a reply can never
+    // itself be replied to.
+    it("rejects a reply-to-a-reply with a 4xx", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const rootResponse = await postComment(commentRequest("comments", { comment: "root" }, "viewer-1"), {
+        params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+      });
+      const { comment: root } = await rootResponse.json();
+      const firstReplyResponse = await postComment(
+        commentRequest("comments", { comment: "first reply", parentCommentId: root.id }, "viewer-2"),
+        { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
+      );
+      const { comment: firstReply } = await firstReplyResponse.json();
+
+      const response = await postComment(
+        commentRequest("comments", { comment: "reply to a reply", parentCommentId: firstReply.id }, "viewer-3"),
+        { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it("403s a reply when the voter is archived", async () => {
+      const voter = await createVoter(db, { title: "x" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const rootResponse = await postComment(commentRequest("comments", { comment: "root" }, "viewer-1"), {
+        params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
+      });
+      const { comment: root } = await rootResponse.json();
+      await closeVoter(db, voter.id);
+
+      const response = await postComment(
+        commentRequest("comments", { comment: "too late", parentCommentId: root.id }, "viewer-2"),
+        { params: Promise.resolve({ voterId: voter.id, variationId: variation.id }) }
+      );
+      expect(response.status).toBe(403);
+    });
+  });
 });
 
 describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId", () => {

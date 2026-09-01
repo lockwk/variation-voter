@@ -35,6 +35,7 @@ function makeComment(overrides: Partial<VariationComment>): VariationComment {
     offsetY: 0.5,
     status: "open",
     seq: 1,
+    parentCommentId: null,
     ...overrides,
   };
 }
@@ -173,6 +174,7 @@ function Panel({
         {mode && (
           <PinCard
             comment={comment}
+            replies={[]}
             pinX={pinX}
             pinY={pinY}
             containerRef={containerRef}

@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, pgEnum, uniqueIndex, real } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, pgEnum, uniqueIndex, real, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const voterStatus = pgEnum("voter_status", ["active", "archived"]);
 export const variationKind = pgEnum("variation_kind", ["url", "image", "embed", "app"]);
@@ -88,6 +88,19 @@ export const comments = pgTable("comments", {
   // to a real 1-based number before the column is relied on anywhere.
   seq: integer("seq").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Flat-thread replies (KEV-183): null means this row IS a root pin comment
+  // (what annotation-layer.tsx renders a numbered pin marker for); non-null
+  // points at the root comment this row replies to. Threads are exactly one
+  // level deep by product decision — a reply's own parentCommentId is always
+  // null-checked server-side (see createReply in db/queries.ts) so a reply
+  // can never itself become a parent ("no reply-to-a-reply"). onDelete
+  // cascade means deleting a root comment takes its whole reply thread with
+  // it, same as deleting a variation already cascades its comments.
+  // Replies reuse the root's `seq` numbering scheme by NOT participating in
+  // it at all — they're never assigned a real seq (left at the column
+  // default 0) and never bump variations.commentSeq, since they're never
+  // rendered as their own pin.
+  parentCommentId: text("parent_comment_id").references((): AnyPgColumn => comments.id, { onDelete: "cascade" }),
 });
 
 export type Voter = typeof voters.$inferSelect;
