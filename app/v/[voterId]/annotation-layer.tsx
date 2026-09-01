@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ArrowUp, CheckCircle, RefreshCcw01, Trash01, X } from "@untitledui/icons";
+import { motion } from "motion/react";
 import { Button } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
@@ -631,7 +632,17 @@ export function AnnotationLayer({
         const pos = positions.get(comment.id)!;
         const isSelected = selectedPinId === comment.id;
         return (
-          <div
+          // A spring scale-in entrance on mount (a pin "dropping" onto the
+          // stage) — `x`/`y: "-50%"` do the centering that used to live on
+          // the Button below, moved up here so the SAME element carries both
+          // the centering translate and the entrance scale (composing into
+          // one `transform`, correctly originating at the pin's anchor
+          // point). The Button's own `scale-125` selection styling stays on
+          // a separate element/transform, so the two scales never fight over
+          // the same property — see this file's own notes on KEV-172. The
+          // transition is inherited from voter-shell.tsx's <MotionConfig>
+          // house spring.
+          <motion.div
             key={comment.id}
             ref={(el) => {
               // A row click in comments-panel.tsx (or a click on this pin
@@ -640,8 +651,10 @@ export function AnnotationLayer({
               // (e.g. a tall app variation) is actually visible once selected.
               if (isSelected) el?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
             }}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
             className="pointer-events-none absolute"
-            style={{ left: pos.x, top: pos.y }}
+            style={{ left: pos.x, top: pos.y, x: "-50%", y: "-50%" }}
           >
             {/* The hover preview (`PinCard` in `mode: "preview"`, rendered
                 once at the overlay root below via `activeCards`) deliberately
@@ -673,13 +686,13 @@ export function AnnotationLayer({
               }}
               onBlur={() => cancelHoverPreview(comment.id)}
               className={cx(
-                "pointer-events-auto flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121] shadow-md transition-[box-shadow,transform] duration-300",
+                "pointer-events-auto flex size-6 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121] shadow-md transition-[box-shadow,transform] duration-300",
                 isSelected && "scale-125 shadow-[0_0_0_4px_#FACC1580]"
               )}
             >
               {comment.seq}
             </Button>
-          </div>
+          </motion.div>
         );
       })}
 
@@ -1080,6 +1093,7 @@ export function PinCard({
   onClose,
   onToggleStatus,
   onRequestDelete,
+  expandEaseClass = "ease-[cubic-bezier(0.19,1,0.22,1)]",
 }: {
   comment: VariationComment;
   pinX: number;
@@ -1096,6 +1110,14 @@ export function PinCard({
    * onRequestDeleteComment doc on AnnotationLayer's own props above. Unused
    * in `preview` mode. */
   onRequestDelete: () => void;
+  /** The easing utility class driving the minimized→expanded morph — the
+   * expanded container's opacity transition and the header action bar's
+   * fade+slide-down (below). Defaults to `--ease-out-expo`, matching the real
+   * voter UI exactly, so every existing caller is unaffected. Exists purely
+   * so the playground's springs-vs-curves exhibit can A/B this curve against
+   * the real `PinCard` without forking it — not intended to vary in
+   * production. */
+  expandEaseClass?: string;
 }) {
   // Beside, not centered-above: the card anchors its LEFT edge next to the
   // pin (see `placeCardLeft`) instead of horizontally centering over it, so
@@ -1131,7 +1153,7 @@ export function PinCard({
             // preserve. Only the header bar below (the one thing that's
             // actually new on click) gets to move; the body just fades in
             // place alongside it.
-            "pointer-events-auto z-40 opacity-100 shadow-lg transition-opacity duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0"
+            cx("pointer-events-auto z-40 opacity-100 shadow-lg transition-opacity duration-150 starting:opacity-0", expandEaseClass)
           : // Softens today's hard pop (this mounts ~300ms into a hover, with
             // no animation of its own) with a quick fade + gentle downward
             // settle — `@starting-style` (via Tailwind's `starting:` variant)
@@ -1154,7 +1176,12 @@ export function PinCard({
               fade+slide-down entrance — the translate is `motion-safe:`-gated
               so reduced-motion users still get the fade without any
               movement. */}
-          <div className="flex translate-y-0 items-center justify-end gap-1 border-b border-[#3F3F46] pb-2 opacity-100 transition-[opacity,transform] duration-[190ms] delay-[50ms] ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:-translate-y-1.5">
+          <div
+            className={cx(
+              "flex translate-y-0 items-center justify-end gap-1 border-b border-[#3F3F46] pb-2 opacity-100 transition-[opacity,transform] duration-[190ms] delay-[50ms] starting:opacity-0 motion-safe:starting:-translate-y-1.5",
+              expandEaseClass
+            )}
+          >
             {canManage && (
               <>
                 <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
