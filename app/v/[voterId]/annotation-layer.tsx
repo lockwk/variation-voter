@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ArrowUp, CheckCircle, RefreshCcw01, Trash01, X } from "@untitledui/icons";
+import { CheckCircle, RefreshCcw01, Trash01, X } from "@untitledui/icons";
 import { motion } from "motion/react";
 import { Button } from "react-aria-components";
 import { cx } from "@/utils/cx";
@@ -723,8 +723,8 @@ export function AnnotationLayer({
               }}
               onBlur={() => cancelHoverPreview(comment.id)}
               className={cx(
-                "pointer-events-auto flex size-6 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121] shadow-md transition-[box-shadow,transform] duration-300",
-                isSelected && "scale-125 shadow-[0_0_0_4px_#FACC1580]"
+                "pointer-events-auto flex size-6 items-center justify-center rounded-full border border-[#212121] bg-[var(--color-accent)] text-[10px] font-semibold text-black/90 shadow-md transition-[box-shadow,transform] duration-300",
+                isSelected && "scale-125 shadow-[0_0_0_4px_#00D7A780]"
               )}
             >
               {comment.seq}
@@ -811,13 +811,18 @@ function PinComposer({
 
   useEffect(() => {
     textareaRef.current?.focus();
+    resize();
   }, []);
 
   function resize() {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    // scrollHeight excludes the border, but with box-sizing:border-box the
+    // height property includes it — add it back so the box lands on its
+    // natural rows=1 height instead of snapping ~2px shorter (KEV-199).
+    const borderY = el.offsetHeight - el.clientHeight;
+    el.style.height = `${el.scrollHeight + borderY}px`;
   }
 
   function submit() {
@@ -840,70 +845,76 @@ function PinComposer({
     <div
       role="dialog"
       aria-label="Add a comment"
-      style={{ left, top: y }}
+      style={{ left, top: y, boxShadow: "#555555 0 0 0 0.5px, #00000066 0 4px 20px -2px" }}
       className={cx(
-        "pointer-events-auto absolute z-30 flex w-64 flex-col gap-2 rounded-lg border border-[#3F3F46] bg-[#2B2B2B] p-3 shadow-lg",
+        "pointer-events-auto absolute z-30 flex w-[304px] flex-col overflow-clip rounded-[12.5px] bg-[#2A2A2A]",
         showBelow ? "translate-y-[12px]" : "-translate-y-[calc(100%+12px)]"
       )}
     >
-      <input
-        aria-label="Your name (optional)"
-        placeholder="Your name (optional)"
-        value={voterName}
-        onChange={(event) => onVoterNameChange(event.target.value)}
-        className="w-full bg-transparent text-sm text-[#E8E8E8] outline-none placeholder:text-[#A1A1AA]"
-      />
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        aria-label="Comment"
-        placeholder="Leave a comment…"
-        value={comment}
-        onChange={(event) => {
-          setComment(event.target.value);
-          resize();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            submit();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            onCancel();
-          }
-        }}
-        className="max-h-40 w-full resize-none bg-transparent text-sm text-[#E8E8E8] outline-none placeholder:text-[#A1A1AA]"
-      />
-      {error && <p className="text-xs text-error-primary">{error}</p>}
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex h-8 shrink-0 items-center justify-end gap-0.5 border-b border-[#373737] px-1.5">
         <button
           type="button"
           aria-label="Cancel comment"
           onClick={onCancel}
-          className="flex size-7 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:text-[#E8E8E8]"
+          className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-[#FFFFFF80] hover:bg-white/10 hover:text-[#FFFFFFE6]"
         >
           <X aria-hidden="true" className="size-4" />
         </button>
-        <button
-          type="button"
-          aria-label="Post comment"
-          disabled={!canSubmit}
-          onClick={submit}
-          style={{ boxShadow: "inset 0 0.5px 0 #FFFFFF40, inset 0 -0.5px 0 #0000004D" }}
-          className={cx(
-            "flex size-7 shrink-0 items-center justify-center rounded-[4px] outline-none transition-colors disabled:cursor-not-allowed",
-            canSubmit ? "bg-[#E8E8E8]" : "bg-[#52525B]"
-          )}
-        >
-          <ArrowUp aria-hidden="true" className="size-4" color="#2B2B2B" />
-        </button>
+      </div>
+      <div className="px-2 pb-2">
+        <div className="flex flex-col gap-2 p-2">
+          <div className="flex flex-col gap-1">
+            <input
+              aria-label="Your name (optional)"
+              placeholder="Your name (optional)"
+              value={voterName}
+              onChange={(event) => onVoterNameChange(event.target.value)}
+              className="w-full rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-xs leading-4 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[color:var(--color-accent)] focus:outline-solid"
+            />
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              aria-label="Comment"
+              placeholder="Leave a comment"
+              value={comment}
+              onChange={(event) => {
+                setComment(event.target.value);
+                resize();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  submit();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  onCancel();
+                }
+              }}
+              className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-xs leading-4 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[color:var(--color-accent)] focus:outline-solid"
+            />
+          </div>
+          {error && <p className="text-xs text-error-primary">{error}</p>}
+          <button
+            type="button"
+            aria-label="Post comment"
+            disabled={!canSubmit}
+            onClick={submit}
+            style={{
+              boxShadow:
+                "inset 0 1px 0 #FFFFFF08, inset 0 0 1px 0.5px #FFFFFF11, 0 1px 0.5px #00000018, 0 0 3px -1px #000000AA",
+            }}
+            className="flex h-6 shrink-0 items-center justify-center self-end rounded-[6px] bg-[#373737] px-2 text-xs font-medium leading-none text-[#FFFFFFE6] outline-none transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Send
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 const CARD_WIDTH = 304; // matches w-[304px] below (PinCard) — KEV-185 redesign
-const COMPOSER_WIDTH = 256; // matches w-64 above (PinComposer)
+const COMPOSER_WIDTH = 304; // matches w-[304px] above (PinComposer)
 const CARD_GUTTER = 8;
 // Still used by PinComposer's own above/below flip below — PinCard no
 // longer needs it now that it's top-aligned beside the pin instead of
@@ -1076,8 +1087,8 @@ function PinCardEntry({ comment, nameRowRef }: { comment: VariationComment; name
   return (
     <div className="flex flex-col gap-1 rounded-[6px] p-2">
       <div ref={nameRowRef} className="flex min-w-0 items-baseline gap-2">
-        <span className="min-w-0 truncate text-xs font-medium text-[#FFFFFFA6]">{pinAuthorLabel(comment)}</span>
-        <span className="ml-auto shrink-0 text-xs font-medium text-[#FFFFFF80]">
+        <span className="min-w-0 truncate text-xs font-medium leading-4 text-[#FFFFFFA6]">{pinAuthorLabel(comment)}</span>
+        <span className="ml-auto shrink-0 text-xs font-medium leading-4 text-[#FFFFFF80]">
           {relativeTimeFrom(comment.createdAt)}
         </span>
       </div>
@@ -1153,7 +1164,11 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    // scrollHeight excludes the border, but with box-sizing:border-box the
+    // height property includes it — add it back so the box lands on its
+    // natural rows=1 height instead of snapping ~2px shorter (KEV-199).
+    const borderY = el.offsetHeight - el.clientHeight;
+    el.style.height = `${el.scrollHeight + borderY}px`;
   }
 
   async function submit() {
@@ -1202,7 +1217,7 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
               void submit();
             }
           }}
-          className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-[13px] leading-5 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[#427FD8]"
+          className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-xs leading-4 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[color:var(--color-accent)] focus:outline-solid"
         />
         <button
           type="button"
@@ -1213,7 +1228,7 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
             boxShadow:
               "inset 0 1px 0 #FFFFFF08, inset 0 0 1px 0.5px #FFFFFF11, 0 1px 0.5px #00000018, 0 0 3px -1px #000000AA",
           }}
-          className="flex h-6 shrink-0 items-center justify-center self-end rounded-[6px] bg-[#373737] px-2 text-xs font-medium text-[#FFFFFFE6] outline-none transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-6 shrink-0 items-center justify-center self-end rounded-[6px] bg-[#373737] px-2 text-xs font-medium leading-none text-[#FFFFFFE6] outline-none transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
         >
           Send
         </button>

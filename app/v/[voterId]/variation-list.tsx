@@ -1,10 +1,9 @@
 "use client";
 
-import { ThumbsDown, ThumbsUp } from "@untitledui/icons";
+import { ThumbsUp } from "@untitledui/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { cx } from "@/utils/cx";
-import { ThumbUpVoted, ThumbDownVoted } from "./voted-thumb-icons";
 import { useScrollFade, SCROLL_FADE_STYLE } from "./use-scroll-fade";
 import type { VariationWithAggregates, VoteDirection } from "@/db/queries";
 
@@ -62,27 +61,24 @@ export function VariationList({
     // space below a short list, but never exceeding half when long. Comments
     // (flex-1 in rail.tsx) always absorbs whatever this doesn't use.
     <div className="flex flex-initial min-h-0 max-h-[50%] flex-col gap-2">
-      <div className="shrink-0 flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-[#E8E8E8]">Sort by</span>
-        <ToggleButtonGroup
-          aria-label="Sort by"
-          selectionMode="single"
-          disallowEmptySelection
-          selectedKeys={[sortMode]}
-          onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
-          className="flex items-center gap-1"
-        >
-          {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
-            <ToggleButton
-              key={mode}
-              id={mode}
-              className="flex h-6 items-center justify-center rounded-md px-3 text-sm font-semibold text-[#737373] outline-none transition-colors selected:bg-[#424242] selected:text-[#E8E8E8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-            >
-              {SORT_LABELS[mode]}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      </div>
+      <ToggleButtonGroup
+        aria-label="Sort by"
+        selectionMode="single"
+        disallowEmptySelection
+        selectedKeys={[sortMode]}
+        onSelectionChange={(keys) => onSortModeChange(Array.from(keys)[0] as SortMode)}
+        className="shrink-0 flex items-center gap-1"
+      >
+        {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
+          <ToggleButton
+            key={mode}
+            id={mode}
+            className="flex h-6 items-center justify-center rounded-md px-3 py-2 text-xs font-semibold text-[#FFFFFF80] outline-none transition-colors selected:bg-[#424242] selected:text-[#FFFFFFE6] not-selected:hover:bg-[#FFFFFF0D] not-selected:hover:text-[#FFFFFFE6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+          >
+            {SORT_LABELS[mode]}
+          </ToggleButton>
+        ))}
+      </ToggleButtonGroup>
       {/* flex-auto (basis: auto, not 0) so this contributes its natural
           content height when the list above is hugging content — a
           flex-1/basis-0 child here would collapse to zero height instead of
@@ -114,46 +110,41 @@ export function VariationList({
                       row's title + padding + gaps + non-selected vote counts
                       all sit in a pointer-events-none overlay so clicks on any
                       of them fall through to this button instead of landing in
-                      dead space. Only the SELECTED row's real vote buttons
-                      re-enable pointer events, so they stay independently
-                      clickable without ever nesting a <button> inside this
-                      one. */}
-                  <div className="relative rounded-lg">
+                      dead space. Only the SELECTED row's real vote button
+                      re-enables pointer events, so it stays independently
+                      clickable/hoverable without ever nesting a <button>
+                      inside this one. Non-selected rows' vote area is
+                      display-only and not interactive (KEV-199). */}
+                  <div className="relative rounded-[4px] transition-[scale] duration-100 has-[>button:active]:scale-[0.98]">
                     <button
                       type="button"
                       onClick={() => onSelect(variation.id)}
                       aria-current={isSelected}
                       aria-label={`V${positionRank.get(variation.id)} ${variation.title}`}
                       className={cx(
-                        "absolute inset-0 h-full w-full rounded-lg outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
-                        isSelected ? "bg-[#424242]" : "bg-[#2B2B2B] hover:bg-[#424242]"
+                        "absolute inset-0 h-full w-full rounded-[4px] outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring active:scale-100",
+                        isSelected ? "bg-[#3C3C3C]" : "bg-transparent hover:bg-[#333333]"
                       )}
                     />
-                    <div className="relative flex items-center justify-between gap-2 pl-3 pr-2 py-2 pointer-events-none">
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                        <span className="text-[#A1A1AA]">V{positionRank.get(variation.id)}</span>{" "}
-                        <span className="text-[#E8E8E8]">{variation.title}</span>
+                    <div className="relative flex items-center justify-between self-stretch gap-2 pl-3 pr-1 py-1 pointer-events-none">
+                      <span className="min-w-0 flex-1 flex items-center gap-2">
+                        <span className="shrink-0 text-xs font-semibold text-[#FFFFFF80]">
+                          V{positionRank.get(variation.id)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#FFFFFFE6]">
+                          {variation.title}
+                        </span>
                       </span>
                       <div className={cx("flex shrink-0 items-center", isSelected && "pointer-events-auto")}>
                         <span className="sr-only">
-                          {variation.up} upvotes, {variation.down} downvotes
+                          {variation.up} upvote{variation.up === 1 ? "" : "s"}
                         </span>
-                        <div className="flex items-center gap-0.5">
-                          <VoteSegment
-                            direction="up"
-                            variation={variation}
-                            isSelected={isSelected}
-                            disabled={disabled}
-                            onVote={onVote}
-                          />
-                          <VoteSegment
-                            direction="down"
-                            variation={variation}
-                            isSelected={isSelected}
-                            disabled={disabled}
-                            onVote={onVote}
-                          />
-                        </div>
+                        <UpvoteControl
+                          variation={variation}
+                          isSelected={isSelected}
+                          disabled={disabled}
+                          onVote={onVote}
+                        />
                       </div>
                     </div>
                   </div>
@@ -170,81 +161,58 @@ export function VariationList({
   );
 }
 
-// E3: inline two-segment vote control per row, replacing the old green/red
-// count badges. Non-selected rows are display-only (plain icon + count);
-// only the selected row's segments are interactive vote buttons, and only
-// then do they pick up the F1/F2 voted-state colors.
-function VoteSegment({
-  direction,
+// E3/KEV-199: upvote-only control per row (downvote removed). Non-selected
+// rows are display-only (plain icon + count, no background chip, not
+// interactive) — only the SELECTED row's control is a real, focusable vote
+// button. Its #484848 chip is a pure hover/press/focus-visible affordance on
+// itself: never persistent just from being selected, and never reachable on
+// a non-selected row. Count brightens whenever the row is selected
+// (hovered or not) and stays muted otherwise; voting alone doesn't brighten
+// it. The thumb only reflects the viewer's voted state (green) or muted —
+// hover never changes the thumb, only the chip does.
+function UpvoteControl({
   variation,
   isSelected,
   disabled,
   onVote,
 }: {
-  direction: VoteDirection;
   variation: VariationWithAggregates;
   isSelected: boolean;
   disabled: boolean;
   onVote: (variationId: string, direction: VoteDirection) => void;
 }) {
-  const Icon = direction === "up" ? ThumbsUp : ThumbsDown;
-  const count = direction === "up" ? variation.up : variation.down;
-  const roundedClass = direction === "up" ? "rounded-l-[4px]" : "rounded-r-[4px]";
-  const base = cx("flex items-center gap-1 justify-center p-2", roundedClass);
+  const isVoted = variation.viewerVote === "up";
+  const count = variation.up;
+  const iconColorClass = isVoted ? "text-[var(--color-accent)]" : "text-[#FFFFFF80]";
+  const countColorClass = isSelected ? "text-[#E8E8E8]" : "text-[#FFFFFF80]";
 
   if (!isSelected) {
     return (
-      <span className={base} aria-hidden="true">
-        <Icon aria-hidden="true" className="size-4" color="#A1A1AA" />
-        <span className="w-5 text-center text-sm font-semibold tabular-nums text-[#E8E8E8]">{count}</span>
+      <span className="flex items-center justify-center gap-1 p-2" aria-hidden="true">
+        <ThumbsUp aria-hidden="true" className={cx("size-4", iconColorClass)} strokeWidth={1.25} />
+        <span className={cx("w-5 text-center text-xs font-semibold tabular-nums", countColorClass)}>{count}</span>
       </span>
     );
   }
-
-  const isVotedThisDirection = variation.viewerVote === direction;
-  // The raised bevel (top highlight + bottom shadow) is constant across states so
-  // the button never changes size or "pops" a border when its vote state flips —
-  // only the background color changes. Both edges are INSET box-shadows (not a real
-  // border) so they add zero layout height.
-  const style = {
-    backgroundColor: isVotedThisDirection
-      ? direction === "up"
-        ? "#86EFAC"
-        : "#FCA5A5"
-      : "#E8E8E8",
-    boxShadow: "inset 0 0.5px 0 #FFFFFF80, inset 0 -0.5px 0 #0000004D",
-  };
 
   return (
     <button
       type="button"
       disabled={disabled}
-      aria-pressed={isVotedThisDirection}
-      aria-label={`Thumbs ${direction}, ${count} vote${count === 1 ? "" : "s"}`}
+      aria-pressed={isVoted}
+      aria-label={`Thumbs up, ${count} vote${count === 1 ? "" : "s"}`}
       onClick={(event) => {
         // Defense in depth: this button already sits above the row's
         // full-bleed selection button via pointer-events layering (not DOM
         // nesting), so a click here never reaches it — but stop propagation
         // too in case this ever gets moved back inside a shared ancestor.
         event.stopPropagation();
-        onVote(variation.id, direction);
+        onVote(variation.id, "up");
       }}
-      style={style}
-      className={cx(
-        base,
-        "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default"
-      )}
+      className="flex items-center justify-center gap-1 rounded-[2px] p-2 outline-none transition-colors hover:bg-[#484848] active:bg-[#484848] focus-visible:bg-[#484848] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default"
     >
-      {isVotedThisDirection ? (
-        direction === "up" ? (
-          <ThumbUpVoted className="size-4" />
-        ) : (
-          <ThumbDownVoted className="size-4" />
-        )
-      ) : (
-        <Icon aria-hidden="true" className="size-4" color="#212121" fill="none" />
-      )}
-      <span className="w-5 text-center text-sm font-semibold tabular-nums text-[#212121]">{count}</span>
+      <ThumbsUp aria-hidden="true" className={cx("size-4", iconColorClass)} strokeWidth={1.25} />
+      <span className={cx("w-5 text-center text-xs font-semibold tabular-nums", countColorClass)}>{count}</span>
     </button>
   );
 }

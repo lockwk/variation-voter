@@ -110,7 +110,7 @@ export function CommentsPanel({
   return (
     <div className="flex flex-1 min-h-0 flex-col gap-3">
       <div className="shrink-0 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-[#E8E8E8]">Comments</h2>
+        <h2 className="text-xs font-semibold text-[#E8E8E8]">Comments</h2>
       </div>
 
       {commentError && <p className="shrink-0 text-xs text-error-primary">{commentError}</p>}
@@ -118,41 +118,51 @@ export function CommentsPanel({
       <div className="relative flex-1 min-h-0">
         <ul ref={listRef} className="flex h-full flex-col overflow-y-auto scrollbar-hide">
           {!variation || !hasAnyPins ? (
-            <li className="mt-3 text-center text-sm text-[#A1A1AA]">No comments yet.</li>
+            <li className="mt-3 text-center text-xs text-[#A1A1AA]">No comments yet.</li>
           ) : (
-            <>
-              {/* Two separate AnimatePresence scopes (not one shared across
-                  open+completed) so a pin moving from open to completed (or
-                  back) genuinely exits one list and enters the other — the
-                  same physical feel as a row landing in a new place, not a
-                  single list silently reordering itself.
-
-                  `key={variation.id}` remounts each scope on a variation
-                  switch: `initial={false}` only suppresses the enter/`layout`
-                  animation on an AnimatePresence's *own first mount*, NOT on a
-                  prop-driven content swap while it stays mounted — so without
-                  the key, switching variations wrongly runs enter+layout for
-                  the incoming rows (a row starts partway down where the old,
-                  taller list sat, then slides up). Remounting makes a
-                  variation switch a clean cut — new comments render at rest at
-                  the top — while add/complete/delete *within* a variation
-                  keeps the same key and still animates. */}
-              <AnimatePresence key={variation.id} mode="popLayout" initial={false}>
-                {openPins.map((item) => (
-                  <CommentRow key={item.id} {...rowProps(item, "complete")} />
-                ))}
-              </AnimatePresence>
+            // KEV-199: a single AnimatePresence wraps open rows, the
+            // "Completed" header, and completed rows — not two separate
+            // scopes. A row keeps the same `key={item.id}` whether it's
+            // rendered in the open group or the completed group below, so
+            // marking it complete (or reopening it) is a REORDER of the same
+            // element instance within one parent, not an exit from one list
+            // paired with an enter into another. Each row's `layout` prop
+            // (see `CommentRow`) then glides that same instance from its old
+            // slot to its new one — and glides its neighbours to close the
+            // gap — in one continuous motion, instead of relying on
+            // `popLayout` to pop an exiting row out of flow (unreliable
+            // under React 19) before the other list snaps shut.
+            //
+            // `key={variation.id}` still remounts the whole scope on a
+            // variation switch: `initial={false}` only suppresses the
+            // enter/`layout` animation on an AnimatePresence's *own first
+            // mount*, NOT on a prop-driven content swap while it stays
+            // mounted — so without the key, switching variations wrongly
+            // runs enter+layout for the incoming rows (a row starts partway
+            // down where the old, taller list sat, then slides up).
+            // Remounting makes a variation switch a clean cut — new comments
+            // render at rest at the top — while add/complete/reopen/delete
+            // *within* a variation keeps the same key and still animates.
+            <AnimatePresence key={variation.id} mode="popLayout" initial={false}>
+              {openPins.map((item) => (
+                <CommentRow key={item.id} {...rowProps(item, "complete")} />
+              ))}
               {completedPins.length > 0 && (
-                <li className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]">
+                <motion.li
+                  key="completed-header"
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]"
+                >
                   Completed
-                </li>
+                </motion.li>
               )}
-              <AnimatePresence key={`${variation.id}-completed`} mode="popLayout" initial={false}>
-                {completedPins.map((item) => (
-                  <CommentRow key={item.id} dimmed {...rowProps(item, "open")} />
-                ))}
-              </AnimatePresence>
-            </>
+              {completedPins.map((item) => (
+                <CommentRow key={item.id} dimmed {...rowProps(item, "open")} />
+              ))}
+            </AnimatePresence>
           )}
         </ul>
         {showFade && (
@@ -221,7 +231,10 @@ function CommentRow({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
-      className={cx("relative transition-opacity", dimmed && "opacity-50")}
+      className={cx(
+        "group relative transition-opacity transition-[scale] duration-100 has-[>button:active]:scale-[0.98]",
+        dimmed && "opacity-50"
+      )}
     >
       {/* Same "full-bleed button underneath, content layered on top in a
           pointer-events-none overlay" pattern as variation-list.tsx's row
@@ -235,7 +248,7 @@ function CommentRow({
         onClick={onSelect}
         aria-pressed={isSelected}
         aria-label={`Select pin ${comment.seq} on the stage: ${comment.comment}`}
-        className="peer absolute inset-0 h-full w-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+        className="peer absolute inset-0 h-full w-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring active:scale-100"
       />
       {/* The card rests transparent so it reads as the panel's own surface
           (KEV-188 review: no distinct fill behind a comment) — only the
@@ -250,7 +263,7 @@ function CommentRow({
       <div
         className={cx(
           "relative flex flex-col gap-3 border-b border-[#373737] pt-3 pr-3 pb-3.5 pl-3 pointer-events-none transition-colors",
-          isSelected ? "bg-[#3C3C3C]" : "peer-hover:bg-[#333333]"
+          isSelected ? "bg-[#3C3C3C]" : "group-hover:bg-[#333333]"
         )}
       >
         {/* Name + timestamp are one tight group (2px apart, per comp 2K0-0);
@@ -259,18 +272,18 @@ function CommentRow({
           <div className="flex h-5 items-center gap-1.5">
             <span
               aria-hidden="true"
-              className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#FFF700] text-[10px] leading-4 font-medium text-black"
+              className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)] text-[10px] leading-4 font-bold text-black/90"
             >
               {comment.seq}
             </span>
-            <span className="flex-grow truncate text-xs leading-4 font-medium text-white/65">{commentDisplayName(comment)}</span>
+            <span className="line-clamp-1 flex-grow text-xs leading-4 font-medium text-white/65">{commentDisplayName(comment)}</span>
             {canManage && (
               <div className="pointer-events-auto mr-1 flex shrink-0 items-center gap-2">
                 <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
                   <TooltipTrigger
                     aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
                     onPress={onToggleStatus}
-                    className="flex size-6 items-center justify-center rounded-[4px] text-white/50 hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
+                    className="flex size-6 items-center justify-center rounded-[4px] text-white/50 hover:bg-[#484848] hover:text-[#E8E8E8]"
                   >
                     {comment.status === "open" ? (
                       <CheckCircle aria-hidden="true" className="size-3.5" />
@@ -283,7 +296,7 @@ function CommentRow({
                   <TooltipTrigger
                     aria-label="Delete comment"
                     onPress={onRequestDelete}
-                    className="flex size-6 items-center justify-center rounded-[4px] text-white/50 hover:bg-[#3F3F46] hover:text-error-primary"
+                    className="flex size-6 items-center justify-center rounded-[4px] text-white/50 hover:bg-[#484848] hover:text-error-primary"
                   >
                     <Trash01 aria-hidden="true" className="size-3.5" />
                   </TooltipTrigger>

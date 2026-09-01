@@ -2,6 +2,25 @@
 @import "./theme.css";
 @import "./typography.css";
 
+@layer base {
+  /* Interactive elements get a pointer cursor. */
+  button:not(:disabled),
+  [role="button"],
+  [role="radio"] {
+    cursor: pointer;
+    transition: scale 100ms ease;
+  }
+
+  /* Pressed state uses the standalone `scale` property (not `transform`)
+     so it composes independently with elements already animated via
+     `transform` (e.g. canvas pin markers positioned with translate). */
+  button:not(:disabled):active,
+  [role="button"]:active,
+  [role="radio"]:active {
+    scale: 0.97;
+  }
+}
+
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-react-aria-components";
 @plugin "tailwindcss-animate";
