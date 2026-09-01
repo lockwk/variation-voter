@@ -1176,39 +1176,48 @@ function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<
   const canSubmit = text.trim().length > 0 && !submitting;
 
   return (
-    <div className="flex flex-col gap-2 px-2 pb-2">
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        aria-label="Reply"
-        placeholder="Reply"
-        value={text}
-        disabled={submitting}
-        onChange={(event) => {
-          setText(event.target.value);
-          resize();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-        className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-[13px] leading-5 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[#427FD8]"
-      />
-      <button
-        type="button"
-        aria-label="Send reply"
-        disabled={!canSubmit}
-        onClick={() => void submit()}
-        style={{
-          boxShadow:
-            "inset 0 1px 0 #FFFFFF08, inset 0 0 1px 0.5px #FFFFFF11, 0 1px 0.5px #00000018, 0 0 3px -1px #000000AA",
-        }}
-        className="flex h-6 shrink-0 items-center justify-center self-end rounded-[6px] bg-[#373737] px-2 text-xs font-medium text-[#FFFFFFE6] outline-none transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        Send
-      </button>
+    // Comp 2H6-0 footer nesting: an outer wrapper (paddingInline 8 +
+    // paddingBottom 8) around an inner row (padding 8) holding the
+    // input+Send column. That double inset is what lands the input at 16px
+    // from the card edge — level with the comment text above (PinCardBody's
+    // p-2 nested in PinCardEntry's p-2) — and leaves 16px below Send. A
+    // single px-2/pb-2 wrapper (the old markup) put the input at only 8px,
+    // so it read wider than the comments and sat too close to the bottom.
+    <div className="px-2 pb-2">
+      <div className="flex flex-col gap-2 p-2">
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          aria-label="Reply"
+          placeholder="Reply"
+          value={text}
+          disabled={submitting}
+          onChange={(event) => {
+            setText(event.target.value);
+            resize();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+          className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-[13px] leading-5 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[#427FD8]"
+        />
+        <button
+          type="button"
+          aria-label="Send reply"
+          disabled={!canSubmit}
+          onClick={() => void submit()}
+          style={{
+            boxShadow:
+              "inset 0 1px 0 #FFFFFF08, inset 0 0 1px 0.5px #FFFFFF11, 0 1px 0.5px #00000018, 0 0 3px -1px #000000AA",
+          }}
+          className="flex h-6 shrink-0 items-center justify-center self-end rounded-[6px] bg-[#373737] px-2 text-xs font-medium text-[#FFFFFFE6] outline-none transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Send
+        </button>
+      </div>
     </div>
   );
 }
