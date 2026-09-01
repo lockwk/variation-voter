@@ -10,6 +10,7 @@ import {
   castVote,
   toggleVote,
   createComment,
+  createReply,
   updateCommentStatus,
   deleteComment,
   purgeExpiredAndArchivedVoters,
@@ -416,6 +417,135 @@ describe("createComment", () => {
     expect(detail?.variations[0].comments).toHaveLength(1);
     expect(detail?.variations[0].comments[0].comment).toBe("mine");
     expect(detail?.variations[0].comments[0].direction).toBeNull();
+  });
+});
+
+// KEV-183: flat-thread replies. A reply reuses createComment's caller shape
+// (variationId/viewerId/comment/voterName) plus a required parentCommentId,
+// but takes a completely different path — no seq/commentSeq bump, and
+// server-side validation that the parent both belongs to this variation and
+// is itself a root (no reply-to-a-reply).
+describe("createReply", () => {
+  it("creates a reply pointing at the root comment, without bumping seq or commentSeq", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
+    expect(root.seq).toBe(1);
+
+    const result = await createReply(db, {
+      variationId: variation.id,
+      viewerId: "v2",
+      comment: "a reply",
+      voterName: "Jamie",
+      parentCommentId: root.id,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.comment.comment).toBe("a reply");
+    expect(result.comment.voterName).toBe("Jamie");
+    expect(result.comment.parentCommentId).toBe(root.id);
+    // Never assigned a real pin number — it's never rendered as its own pin.
+    expect(result.comment.seq).toBe(0);
+
+    // A second root comment on the same variation still gets seq 2, not 3 —
+    // proof the reply never bumped variations.commentSeq.
+    const secondRoot = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root 2" });
+    expect(secondRoot.seq).toBe(2);
+  });
+
+  it("rejects a reply whose parentCommentId doesn't exist", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+
+    const result = await createReply(db, {
+      variationId: variation.id,
+      viewerId: "v1",
+      comment: "orphan reply",
+      parentCommentId: "nonexistent-id",
+    });
+
+    expect(result).toEqual({ ok: false, error: "parent_not_found" });
+  });
+
+  it("rejects a reply whose parent belongs to a different variation", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variationA = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variationB = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
+    const root = await createComment(db, { variationId: variationA.id, viewerId: "v1", comment: "root on A" });
+
+    const result = await createReply(db, {
+      variationId: variationB.id,
+      viewerId: "v1",
+      comment: "wrong variation",
+      parentCommentId: root.id,
+    });
+
+    expect(result).toEqual({ ok: false, error: "parent_not_found" });
+  });
+
+  // Flat threading (product decision): a reply's own id can never be
+  // targeted by another reply — only root comments accept replies.
+  it("rejects a reply-to-a-reply", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
+    const firstReply = await createReply(db, {
+      variationId: variation.id,
+      viewerId: "v2",
+      comment: "first reply",
+      parentCommentId: root.id,
+    });
+    expect(firstReply.ok).toBe(true);
+    if (!firstReply.ok) throw new Error("expected ok");
+
+    const result = await createReply(db, {
+      variationId: variation.id,
+      viewerId: "v3",
+      comment: "reply to a reply",
+      parentCommentId: firstReply.comment.id,
+    });
+
+    expect(result).toEqual({ ok: false, error: "parent_not_root" });
+  });
+
+  it("cascade-deletes a root's replies when the root is deleted", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
+    const reply = await createReply(db, {
+      variationId: variation.id,
+      viewerId: "v2",
+      comment: "a reply",
+      parentCommentId: root.id,
+    });
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) throw new Error("expected ok");
+
+    await deleteComment(db, { id: root.id });
+
+    const detail = await getVoterDetail(db, voter.id);
+    expect(detail?.variations[0].comments).toHaveLength(0);
+  });
+
+  it("exposes the reply's parentCommentId, and the root's null parentCommentId, via getVoterDetail", async () => {
+    const voter = await createVoter(db, { title: "x" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
+    const reply = await createReply(db, {
+      variationId: variation.id,
+      viewerId: "v2",
+      comment: "a reply",
+      parentCommentId: root.id,
+    });
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) throw new Error("expected ok");
+
+    const detail = await getVoterDetail(db, voter.id);
+    const rootRow = detail?.variations[0].comments.find((c) => c.id === root.id);
+    const replyRow = detail?.variations[0].comments.find((c) => c.id === reply.comment.id);
+    expect(rootRow?.parentCommentId).toBeNull();
+    expect(replyRow?.parentCommentId).toBe(root.id);
   });
 });
 

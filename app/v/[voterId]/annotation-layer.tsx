@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ArrowUp, CheckCircle, RefreshCcw01, Trash01, X } from "@untitledui/icons";
 import { Button } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
+import { relativeTimeFrom } from "@/lib/relative-time";
 import type { Comment, CommentAnchorInput, VariationComment } from "@/db/queries";
 
 const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
@@ -162,6 +163,7 @@ export function AnnotationLayer({
   voterName,
   onVoterNameChange,
   onCommentSubmit,
+  onReplySubmit,
   selectedPinId,
   onSelectPin,
   onToggleCommentStatus,
@@ -195,6 +197,14 @@ export function AnnotationLayer({
    * succeeds (KEV-172 chunk 4) — never a client-guessed one, so the pin's
    * frozen `seq` number is always the real one the server assigned. */
   onCommentSubmit: (variationId: string, comment: Comment) => void;
+  /** Posts a flat-thread reply (KEV-183) to the given root comment and
+   * resolves once the request settles — `true` on success (voter-shell.tsx
+   * has already appended the server-confirmed row by the time this
+   * resolves), `false` on failure (nothing appended; voter-shell.tsx has
+   * already surfaced the shared comment-error banner). The expanded
+   * `PinCard`'s reply box awaits this to decide whether to clear its own
+   * textarea. Unused in `preview` mode — no reply box is rendered there. */
+  onReplySubmit?: (variationId: string, parentCommentId: string, text: string) => Promise<boolean>;
   /** The comment id most recently selected — by a click on its panel row
    * (comments-panel.tsx) or on this pin itself — so this pin can render
    * emphasized, scroll into view, and show its expanded card (KEV-172
@@ -248,6 +258,33 @@ export function AnnotationLayer({
     }
     setHoveredPinId((current) => (current === commentId ? null : current));
   }
+  // KEV-183: `comments` now carries both root pin comments AND their flat
+  // reply threads (parentCommentId !== null). Only roots ever get a pin
+  // marker/position on the stage — the position-recompute effect and every
+  // pin-rendering path below reads `rootComments`, never `comments` directly.
+  // Replies are grouped by their root's id instead, sorted oldest-first, so
+  // an expanded PinCard can render its whole thread underneath the root
+  // entry (see `repliesByParentId` below, and PinCard's own `replies` prop).
+  // Memoized on `comments` itself (not recomputed every render) because
+  // `rootComments` also feeds the position-recompute effect's dependency
+  // array below — an unmemoized `.filter()` would hand that effect a new
+  // array identity every render and force it to tear down and re-attach its
+  // rAF loop/listeners far more often than `comments` actually changes.
+  const rootComments = useMemo(() => comments.filter((c) => c.parentCommentId === null), [comments]);
+  const repliesByParentId = useMemo(() => {
+    const map = new Map<string, VariationComment[]>();
+    for (const c of comments) {
+      if (c.parentCommentId === null) continue;
+      const list = map.get(c.parentCommentId);
+      if (list) list.push(c);
+      else map.set(c.parentCommentId, [c]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    }
+    return map;
+  }, [comments]);
+
   const crossOriginWarnedRef = useRef(false);
 
   function warnCrossOriginOnce() {
@@ -412,7 +449,7 @@ export function AnnotationLayer({
   // scroll/resize listeners just make it visually instant for those
   // specific, common triggers.
   useEffect(() => {
-    const hasRenderablePins = comments.some(
+    const hasRenderablePins = rootComments.some(
       (c) =>
         c.status === "open" &&
         ((c.anchorType === "element" && !!c.selector) ||
@@ -429,7 +466,7 @@ export function AnnotationLayer({
       const containerRect = container.getBoundingClientRect();
       const next = new Map<string, PinPos>();
 
-      for (const c of comments) {
+      for (const c of rootComments) {
         if (c.status !== "open") continue;
 
         if (c.anchorType === "element") {
@@ -517,7 +554,7 @@ export function AnnotationLayer({
       iframeWindow?.removeEventListener("scroll", recompute);
       resizeObserver?.disconnect();
     };
-  }, [comments, mediaKind, containerRef, iframeRef, imgRef, embedRef]);
+  }, [rootComments, mediaKind, containerRef, iframeRef, imgRef, embedRef]);
 
   function handleImageClick(event: React.MouseEvent<HTMLDivElement>) {
     const img = imgRef?.current;
@@ -577,7 +614,7 @@ export function AnnotationLayer({
     }
   }
 
-  const openPinnedComments = comments.filter((c) => c.status === "open" && positions.has(c.id));
+  const openPinnedComments = rootComments.filter((c) => c.status === "open" && positions.has(c.id));
   // `PinCard` (below) is rendered once per active pin, at the overlay root —
   // not nested inside a pin's own wrapper div below — so its x/y stay in the
   // same container-relative coordinate space as `positions`/PinComposer's
@@ -687,6 +724,7 @@ export function AnnotationLayer({
         <PinCard
           key={c.comment.id}
           comment={c.comment}
+          replies={repliesByParentId.get(c.comment.id) ?? []}
           pinX={c.pos.x}
           pinY={c.pos.y}
           mode={c.mode}
@@ -697,6 +735,7 @@ export function AnnotationLayer({
             onToggleCommentStatus?.(variationId, c.comment.id, c.comment.status === "open" ? "complete" : "open")
           }
           onRequestDelete={() => onRequestDeleteComment?.(variationId, c.comment.id)}
+          onReplySubmit={onReplySubmit ? (text: string) => onReplySubmit(variationId, c.comment.id, text) : undefined}
         />
       ))}
 
@@ -850,7 +889,7 @@ function PinComposer({
   );
 }
 
-const CARD_WIDTH = 288; // matches w-72 below (PinCard)
+const CARD_WIDTH = 304; // matches w-[304px] below (PinCard) — KEV-185 redesign
 const COMPOSER_WIDTH = 256; // matches w-64 above (PinComposer)
 const CARD_GUTTER = 8;
 // Still used by PinComposer's own above/below flip below — PinCard no
@@ -915,6 +954,7 @@ function usePinCardPlacement({
   containerRef,
   cardWidth,
   mode,
+  remeasureKey,
 }: {
   pinX: number;
   pinY: number;
@@ -926,6 +966,13 @@ function usePinCardPlacement({
    * just on mount. Included in the measuring effect's deps below purely to
    * force a re-measure when it flips — its value is never read directly. */
   mode: "preview" | "expanded";
+  /** KEV-183: the reply thread's length — included in the measuring effect's
+   * deps below (like `mode`) purely to force a re-measure when a reply is
+   * posted. Without this, the card's own height (`cardHeight`, used for the
+   * bottom-clamp below) would stay pinned to its pre-reply measurement, so a
+   * newly-taller thread could grow past the stage's bottom gutter instead of
+   * pulling `top` up to compensate. */
+  remeasureKey: number;
 }): {
   left: number;
   top: number;
@@ -969,7 +1016,7 @@ function usePinCardPlacement({
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [containerRef, mode]);
+  }, [containerRef, mode, remeasureKey]);
 
   // Beside, not centered-above: the card anchors its LEFT edge next to the
   // pin (see `placeCardLeft`) instead of horizontally centering over it.
@@ -1006,29 +1053,150 @@ function usePinCardPlacement({
 }
 
 /**
- * The author row + comment body shared, byte-for-byte, between `PinCard`'s
- * `preview` and `expanded` modes — the actual guarantee behind "hovering →
- * clicking never shifts the author line". If the two modes each rendered
- * their own copy of this markup, a future edit to one (padding, font size,
- * wrapping) could silently drift it out of alignment with the other; sharing
- * one component makes that impossible. (It's also, post-merge, literally the
- * same DOM subtree across a preview→expanded morph, not just visually
- * identical markup — see `PinCard`'s own doc comment.)
+ * One entry in the card's comment list (KEV-185 redesign) — the root pin
+ * comment, or one of its flat-thread replies (KEV-183): name + relative
+ * timestamp on one baseline-aligned row, the comment text below it. Root and
+ * reply entries render identically; the only thing that distinguishes them
+ * is which array `PinCardBody` pulled them from.
+ */
+function PinCardEntry({ comment, nameRowRef }: { comment: VariationComment; nameRowRef?: RefObject<HTMLDivElement | null> }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-[6px] p-2">
+      <div ref={nameRowRef} className="flex min-w-0 items-baseline gap-2">
+        <span className="min-w-0 truncate text-xs font-medium text-[#FFFFFFA6]">{pinAuthorLabel(comment)}</span>
+        <span className="ml-auto shrink-0 text-xs font-medium text-[#FFFFFF80]">
+          {relativeTimeFrom(comment.createdAt)}
+        </span>
+      </div>
+      <p className="whitespace-pre-wrap break-words text-[13px] leading-5 text-[#FFFFFFE6]">
+        {comment.comment}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The comment list shared, byte-for-byte, between `PinCard`'s `preview` and
+ * `expanded` modes — the actual guarantee behind "hovering → clicking never
+ * shifts the root entry". If the two modes each rendered their own copy of
+ * this markup, a future edit to one (padding, font size, wrapping) could
+ * silently drift it out of alignment with the other; sharing one component
+ * makes that impossible. (It's also, post-merge, literally the same DOM
+ * subtree across a preview→expanded morph, not just visually identical
+ * markup — see `PinCard`'s own doc comment.) `replies` is always `[]` in
+ * `preview` mode (see `PinCard`) — the root entry stays the FIRST child
+ * either way, so its own DOM node/position never moves; reply entries just
+ * append after it once a pin is expanded.
  */
 function PinCardBody({
   comment,
+  replies,
   messageRowRef,
 }: {
   comment: VariationComment;
+  replies: VariationComment[];
   messageRowRef: RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <>
-      <div ref={messageRowRef} className="flex min-w-0 items-center">
-        <span className="truncate text-sm font-medium text-[#E8E8E8]">{pinAuthorLabel(comment)}</span>
-      </div>
-      <p className="whitespace-pre-wrap text-sm text-[#E8E8E8]">{comment.comment}</p>
-    </>
+    <div className="flex flex-col gap-2 p-2">
+      <PinCardEntry comment={comment} nameRowRef={messageRowRef} />
+      {replies.map((reply) => (
+        <PinCardEntry key={reply.id} comment={reply} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The reply composer (KEV-183 core requirement) — always present in
+ * `expanded` mode, never rendered in `preview`. Autofocuses on mount, which
+ * is exactly "when the card opens": this component only exists in the DOM
+ * once `PinCard` is expanded (mounting fresh on preview→expanded, same as on
+ * a direct expanded mount from a panel-row click), so a plain mount-effect
+ * is enough — no need to key it off `mode` explicitly. Submits on Enter
+ * (Shift+Enter inserts a newline, matching PinComposer's own textarea
+ * above); Send is disabled while empty or in flight. Reuses the shared
+ * `voterName` state one level up (voter-shell.tsx) rather than asking for a
+ * second name field — see AnnotationLayer's `onReplySubmit` doc.
+ */
+function PinCardReplyInput({ onSubmit }: { onSubmit?: (text: string) => Promise<boolean> }) {
+  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    // Resize immediately after focusing, on mount: the textarea starts life
+    // at the browser's default empty `rows={1}` height, which is ~1px taller
+    // than its settled `scrollHeight` once real content-box metrics are in
+    // play. Without this, the FIRST keystroke's `onChange` → `resize()` is
+    // what does that initial snap, visibly collapsing the card by that 1px
+    // right as someone starts typing. Running `resize()` here settles the
+    // height before any keystroke, so typing never causes a jump.
+    textareaRef.current?.focus();
+    resize();
+  }, []);
+
+  function resize() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  async function submit() {
+    const trimmed = text.trim();
+    if (!trimmed || submitting || !onSubmit) return;
+    setSubmitting(true);
+    const ok = await onSubmit(trimmed);
+    setSubmitting(false);
+    if (ok) {
+      setText("");
+      // Collapse the textarea back down once its content (and thus its
+      // grown height) is cleared — mirrors `resize()`'s own auto/scrollHeight
+      // dance above, just run after React has committed the emptied value.
+      requestAnimationFrame(() => {
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+      });
+    }
+  }
+
+  const canSubmit = text.trim().length > 0 && !submitting;
+
+  return (
+    <div className="flex flex-col gap-2 px-2 pb-2">
+      <textarea
+        ref={textareaRef}
+        rows={1}
+        aria-label="Reply"
+        placeholder="Reply"
+        value={text}
+        disabled={submitting}
+        onChange={(event) => {
+          setText(event.target.value);
+          resize();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            void submit();
+          }
+        }}
+        className="max-h-40 w-full resize-none rounded-[4px] border border-[#373737] bg-[#373737] p-2 text-[13px] leading-5 text-[#FFFFFFE6] outline-none placeholder:text-[#FFFFFF80] focus:-outline-offset-1 focus:outline-2 focus:outline-[#427FD8]"
+      />
+      <button
+        type="button"
+        aria-label="Send reply"
+        disabled={!canSubmit}
+        onClick={() => void submit()}
+        style={{
+          boxShadow:
+            "inset 0 1px 0 #FFFFFF08, inset 0 0 1px 0.5px #FFFFFF11, 0 1px 0.5px #00000018, 0 0 3px -1px #000000AA",
+        }}
+        className="flex h-6 shrink-0 items-center justify-center self-end rounded-[6px] bg-[#373737] px-2 text-xs font-medium text-[#FFFFFFE6] outline-none transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Send
+      </button>
+    </div>
   );
 }
 
@@ -1039,39 +1207,45 @@ function PinCardBody({
  * `mode: "preview"` (hover) to `mode: "expanded"` (click) instead of
  * unmounting one component and mounting a different one in its place. That's
  * what makes hover→click a true in-place morph rather than a swap that merely
- * looks similar: the container div persists, `PinCardBody` (author row +
- * comment text) never re-mounts and so never re-animates, and the only thing
- * that visibly enters is the header action bar — because it's the only piece
- * of markup that's actually new between the two modes.
+ * looks similar: the container div persists, `PinCardBody`'s root entry
+ * (name row + comment text) never re-mounts and so never re-animates, and
+ * the only things that visibly enter are the header action bar and (KEV-183)
+ * the reply composer + any reply entries — the pieces of markup that are
+ * actually new between the two modes.
  *
  * - **preview** (hover/focus, not yet clicked): `aria-hidden`,
- *   `pointer-events-none`, no `role`, no header bar, no click handler — a
- *   lightweight read-only stand-in. `aria-hidden` because the pin itself
- *   already carries the equivalent text in its `aria-label` (see the marker
- *   `Button` in AnnotationLayer); `pointer-events-none` so it never
- *   intercepts the click that would open the real (expanded) card.
+ *   `pointer-events-none`, no `role`, no header bar, no reply composer, no
+ *   click handler, and no reply entries (`replies` is passed through as `[]`
+ *   regardless of how many replies exist) — a lightweight read-only
+ *   stand-in. `aria-hidden` because the pin itself already carries the
+ *   equivalent text in its `aria-label` (see the marker `Button` in
+ *   AnnotationLayer); `pointer-events-none` so it never intercepts the click
+ *   that would open the real (expanded) card.
  * - **expanded** (selected/clicked): `role="dialog"`, `aria-label`,
  *   `pointer-events-auto`, `onClick` stopPropagation (so a click on the
  *   card's own padding doesn't bubble up to stage.tsx's "click empty canvas"
  *   deselect handler — this card being open is itself evidence the click
- *   landed on non-empty canvas), and the header action bar (Complete/Reopen +
- *   Delete when `canManage`, Close always).
+ *   landed on non-empty canvas), the header action bar (Complete/Reopen +
+ *   Delete when `canManage`, Close always), the full
+ *   reply thread under the root entry, and the always-present, autofocusing
+ *   reply composer (KEV-183).
  *
  * Both modes share `usePinCardPlacement` (same `cardWidth`) and
- * `PinCardBody`, so the author row lands in the EXACT same spot in both — no
+ * `PinCardBody`, so the root entry lands in the EXACT same spot in both — no
  * visual jump when a hover turns into a click. The container's own entrance
  * transition differs slightly by mode (preview gets a small translate +
  * opacity settle since it has no other motion of its own; expanded is
  * opacity-only, deliberately with NO transform, so it never re-shifts a body
  * that a preview may already be showing in the same spot) — only the header
- * bar gets its own, slightly delayed fade+slide-down entrance, since it's the
- * one thing that's actually new on click. `z-40` for expanded vs `z-30` for
- * preview so an open card sits above any concurrent preview of another pin
- * (see AnnotationLayer's `activeCards`, which can render both a pin's
+ * bar gets its own, slightly delayed fade+slide-down entrance, since it's one
+ * of the things that's actually new on click. `z-40` for expanded vs `z-30`
+ * for preview so an open card sits above any concurrent preview of another
+ * pin (see AnnotationLayer's `activeCards`, which can render both a pin's
  * expanded card and a different pin's preview card at once).
  */
 export function PinCard({
   comment,
+  replies,
   pinX,
   pinY,
   containerRef,
@@ -1080,8 +1254,12 @@ export function PinCard({
   onClose,
   onToggleStatus,
   onRequestDelete,
+  onReplySubmit,
 }: {
   comment: VariationComment;
+  /** This root comment's flat-thread replies (KEV-183), oldest first —
+   * ignored in `preview` mode (see this component's own doc comment). */
+  replies: VariationComment[];
   pinX: number;
   pinY: number;
   containerRef: RefObject<HTMLDivElement | null>;
@@ -1096,42 +1274,51 @@ export function PinCard({
    * onRequestDeleteComment doc on AnnotationLayer's own props above. Unused
    * in `preview` mode. */
   onRequestDelete: () => void;
+  /** Posts a reply to this root comment — see AnnotationLayer's own doc on
+   * this prop. Unused in `preview` mode (no reply composer is rendered). */
+  onReplySubmit?: (text: string) => Promise<boolean>;
 }) {
   // Beside, not centered-above: the card anchors its LEFT edge next to the
   // pin (see `placeCardLeft`) instead of horizontally centering over it, so
   // there's no `-translate-x-1/2` here. Top-aligned to the pin:
-  // `usePinCardPlacement` lines the first message row (ref'd below, via
+  // `usePinCardPlacement` lines the first entry's name row (ref'd below, via
   // `PinCardBody`) up with the pin's own top edge, re-measuring synchronously
-  // whenever `mode` changes so the header bar appearing/disappearing never
-  // makes the body jump for a frame (see that hook's own doc comment).
+  // whenever `mode` or the reply count changes so neither the header bar nor
+  // a newly-posted reply ever makes the card jump/clip for a frame (see that
+  // hook's own doc comment).
+  const expanded = mode === "expanded";
   const { left, top, messageRowRef, cardRef } = usePinCardPlacement({
     pinX,
     pinY,
     containerRef,
     cardWidth: CARD_WIDTH,
     mode,
+    remeasureKey: expanded ? replies.length : 0,
   });
-  const expanded = mode === "expanded";
 
   return (
     <div
       ref={cardRef}
       role={expanded ? "dialog" : undefined}
-      aria-label={expanded ? `Pin ${comment.seq} comment` : undefined}
+      aria-label={expanded ? `Pin ${comment.seq} comment thread` : undefined}
       aria-hidden={expanded ? undefined : "true"}
       onClick={expanded ? (event) => event.stopPropagation() : undefined}
-      style={{ left, top }}
+      style={{
+        left,
+        top,
+        boxShadow: "#555555 0 0 0 0.5px, #00000066 0 4px 20px -2px",
+      }}
       className={cx(
-        "absolute flex w-72 flex-col gap-2 rounded-lg border border-[#3F3F46] bg-[#2B2B2B] p-3",
+        "absolute flex w-[304px] flex-col overflow-clip rounded-[12.5px] bg-[#2A2A2A]",
         expanded
           ? // Opacity-only entrance, deliberately with NO transform: a
             // preview card may already be showing this exact body in this
             // exact spot (see `usePinCardPlacement`), so a transform here
             // would shift it and break the continuity a click is supposed to
-            // preserve. Only the header bar below (the one thing that's
+            // preserve. Only the header bar below (one of the things that's
             // actually new on click) gets to move; the body just fades in
             // place alongside it.
-            "pointer-events-auto z-40 opacity-100 shadow-lg transition-opacity duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0"
+            "pointer-events-auto z-40 opacity-100 transition-opacity duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0"
           : // Softens today's hard pop (this mounts ~300ms into a hover, with
             // no animation of its own) with a quick fade + gentle downward
             // settle — `@starting-style` (via Tailwind's `starting:` variant)
@@ -1139,68 +1326,75 @@ export function PinCard({
             // animate from. The translate is `motion-safe:`-gated (movement
             // only), while the opacity fade plays for everyone, including
             // reduced-motion users.
-            "pointer-events-none z-30 translate-y-0 opacity-100 shadow-lg transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:translate-y-[3px]"
+            "pointer-events-none z-30 translate-y-0 opacity-100 transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:translate-y-[3px]"
       )}
     >
       {expanded && (
-        <>
-          {/* Header bar: right-aligned action icon-buttons, visually
-              separated from the author + body below by a divider — Close is
-              always present (even for non-authors / an archived voter),
-              while Complete/Reopen and Delete only join it when `canManage`
-              is true. This is the one part of the card that's actually NEW
-              when a pin goes from previewed to expanded (the body below is
-              identical to the preview), so it gets its own, slightly delayed
-              fade+slide-down entrance — the translate is `motion-safe:`-gated
-              so reduced-motion users still get the fade without any
-              movement. */}
-          <div className="flex translate-y-0 items-center justify-end gap-1 border-b border-[#3F3F46] pb-2 opacity-100 transition-[opacity,transform] duration-[190ms] delay-[50ms] ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:-translate-y-1.5">
-            {canManage && (
-              <>
-                <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
-                  <TooltipTrigger
-                    aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
-                    onPress={onToggleStatus}
-                    className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
-                  >
-                    {comment.status === "open" ? (
-                      <CheckCircle aria-hidden="true" className="size-4" />
-                    ) : (
-                      <RefreshCcw01 aria-hidden="true" className="size-4" />
-                    )}
-                  </TooltipTrigger>
-                </Tooltip>
-                <Tooltip title="Delete" placement="top">
-                  <TooltipTrigger
-                    aria-label="Delete comment"
-                    onPress={onRequestDelete}
-                    className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-error-primary"
-                  >
-                    <Trash01 aria-hidden="true" className="size-4" />
-                  </TooltipTrigger>
-                </Tooltip>
-              </>
-            )}
-            <Tooltip title="Close" placement="top">
-              <TooltipTrigger
-                aria-label="Close comment"
-                onPress={onClose}
-                className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
-              >
-                <X aria-hidden="true" className="size-4" />
-              </TooltipTrigger>
-            </Tooltip>
-          </div>
-        </>
+        <div className="flex h-8 shrink-0 translate-y-0 items-center justify-end gap-0.5 border-b border-[#373737] px-1.5 opacity-100 transition-[opacity,transform] duration-[190ms] delay-[50ms] ease-[cubic-bezier(0.19,1,0.22,1)] starting:opacity-0 motion-safe:starting:-translate-y-1.5">
+          {/* Header bar: right-aligned 24×24 action buttons — Close is always
+              present (even for non-authors / an archived voter), while
+              Complete/Reopen and Delete only join it when `canManage` is
+              true. This is one of the parts of the card
+              that's actually NEW when a pin goes from previewed to expanded
+              (the root entry below is identical to the preview), so it gets
+              its own, slightly delayed fade+slide-down entrance — the
+              translate is `motion-safe:`-gated so reduced-motion users still
+              get the fade without any movement. */}
+          {canManage && (
+            <>
+              <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
+                <TooltipTrigger
+                  aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
+                  onPress={onToggleStatus}
+                  className="flex size-6 items-center justify-center rounded-[4px] text-[#FFFFFF80] hover:bg-white/10 hover:text-[#FFFFFFE6]"
+                >
+                  {comment.status === "open" ? (
+                    <CheckCircle aria-hidden="true" className="size-4" />
+                  ) : (
+                    <RefreshCcw01 aria-hidden="true" className="size-4" />
+                  )}
+                </TooltipTrigger>
+              </Tooltip>
+              <Tooltip title="Delete" placement="top">
+                <TooltipTrigger
+                  aria-label="Delete comment"
+                  onPress={onRequestDelete}
+                  className="flex size-6 items-center justify-center rounded-[4px] text-[#FFFFFF80] hover:bg-white/10 hover:text-error-primary"
+                >
+                  <Trash01 aria-hidden="true" className="size-4" />
+                </TooltipTrigger>
+              </Tooltip>
+            </>
+          )}
+          <Tooltip title="Close" placement="top">
+            <TooltipTrigger
+              aria-label="Close comment"
+              onPress={onClose}
+              className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-[#FFFFFF80] hover:bg-white/10 hover:text-[#FFFFFFE6]"
+            >
+              <X aria-hidden="true" className="size-4" />
+            </TooltipTrigger>
+          </Tooltip>
+        </div>
       )}
 
-      {/* Author row + comment body — the same `PinCardBody` node across a
-          preview→expanded morph (see this component's own doc comment), so
-          it's never re-mounted and never re-animates when the header bar
-          above it appears. Its measured `offsetTop` is what `top` aligns to
-          the pin's own top edge, so this row (not the card's outer padding)
-          reads as level with the pin. */}
-      <PinCardBody comment={comment} messageRowRef={messageRowRef} />
+      {/* Comment list — the same `PinCardBody` node (and the same root
+          `PinCardEntry` node within it) across a preview→expanded morph (see
+          this component's own doc comment), so the root entry is never
+          re-mounted and never re-animates when the header bar above it
+          appears; reply entries (expanded only) just append after it. Its
+          measured `offsetTop` is what `top` aligns to the pin's own top
+          edge, so this row (not the card's outer edge) reads as level with
+          the pin. */}
+      <PinCardBody comment={comment} replies={expanded ? replies : []} messageRowRef={messageRowRef} />
+
+      {/* Reply composer (KEV-183) — present in expanded mode, never in
+          preview, and locked out when the voter is archived (`canManage` is
+          false): an archived voter is read-only for every viewer, same as
+          new-pin creation (stage.tsx) and the manage actions above. Without
+          this gate the box would look usable but every submit would 403.
+          See PinCardReplyInput's own doc comment for the autofocus behavior. */}
+      {expanded && canManage && <PinCardReplyInput onSubmit={onReplySubmit} />}
     </div>
   );
 }

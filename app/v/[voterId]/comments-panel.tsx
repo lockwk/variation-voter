@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { CheckCircle, RefreshCcw01, Trash01 } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 import { relativeTimeFrom } from "@/lib/relative-time";
@@ -58,13 +59,41 @@ export function CommentsPanel({
   const canManage = voterStatus !== "archived";
   const [listRef, showFade] = useScrollFade<HTMLUListElement>([variation?.comments.length ?? 0]);
 
-  const openPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "open")) : [];
-  const completedPins = variation ? sortBySeq(variation.comments.filter((c) => c.status === "complete")) : [];
+  // KEV-183: this panel tracks pins, not the flat reply threads underneath
+  // them — a reply (parentCommentId !== null) never gets its own numbered
+  // pin marker on the stage (see annotation-layer.tsx), so it never gets a
+  // real `seq` either (left at the schema default 0); mixing replies into
+  // these seq-sorted lists would put them all first, ahead of pin #1. Instead
+  // each reply renders nested under its parent row below (read-only — see
+  // `repliesByParentId` and `CommentRow`'s own doc comment), so the panel and
+  // the pin's own expanded card (annotation-layer.tsx) agree on what a
+  // thread looks like.
+  const rootComments = variation ? variation.comments.filter((c) => c.parentCommentId === null) : [];
+  const openPins = sortBySeq(rootComments.filter((c) => c.status === "open"));
+  const completedPins = sortBySeq(rootComments.filter((c) => c.status === "complete"));
   const hasAnyPins = openPins.length > 0 || completedPins.length > 0;
+
+  // Same grouping + ordering (chronological, oldest first) as
+  // annotation-layer.tsx's own `repliesByParentId` — keeping the sort
+  // identical is what makes a reply thread read the same in both places.
+  const repliesByParentId = useMemo(() => {
+    const map = new Map<string, VariationComment[]>();
+    for (const c of variation?.comments ?? []) {
+      if (c.parentCommentId === null) continue;
+      const list = map.get(c.parentCommentId);
+      if (list) list.push(c);
+      else map.set(c.parentCommentId, [c]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    }
+    return map;
+  }, [variation]);
 
   function rowProps(item: VariationComment, nextStatus: "open" | "complete") {
     return {
       comment: item,
+      replies: repliesByParentId.get(item.id) ?? [],
       canManage,
       isSelected: selectedPinId === item.id,
       onSelect: () => onSelectPin?.(item.id),
@@ -126,8 +155,20 @@ function commentDisplayName(comment: VariationComment): string {
   return trimmedName || "Anonymous";
 }
 
+/**
+ * A pin's root comment row, plus (KEV-183) its flat-thread replies nested
+ * read-only underneath the root body. Replies are tied to their parent, not
+ * independently actionable — confirmed product decision: no delete, no
+ * complete, no pin-number badge, and clicking anywhere in a reply (or
+ * anywhere else in this `<li>`) selects the parent pin, not the reply,
+ * because they share the same full-bleed select `<button>` below. A reply
+ * therefore needs no `onSelect`/`onRequestDelete`/`onToggleStatus` of its
+ * own — it's rendered by a separate, deliberately narrower component
+ * (`ReplyEntry`) rather than reusing `CommentRow` itself.
+ */
 function CommentRow({
   comment,
+  replies,
   dimmed = false,
   isSelected,
   canManage,
@@ -136,6 +177,10 @@ function CommentRow({
   onToggleStatus,
 }: {
   comment: VariationComment;
+  /** This root comment's replies, oldest first — same ordering as
+   * annotation-layer.tsx's own `repliesByParentId` (see comments-panel's
+   * copy above), so the panel and the pin's expanded card agree. */
+  replies: VariationComment[];
   dimmed?: boolean;
   isSelected: boolean;
   /** Any viewer may complete/reopen or delete any comment while the voter
@@ -178,6 +223,13 @@ function CommentRow({
             <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
           </div>
           <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
+          {replies.length > 0 && (
+            <div className="mt-1 flex flex-col gap-2 border-l border-[#3F3F46] pl-2.5">
+              {replies.map((reply) => (
+                <ReplyEntry key={reply.id} comment={reply} />
+              ))}
+            </div>
+          )}
         </div>
         {canManage && (
           <div className="pointer-events-auto flex shrink-0 items-center gap-1">
@@ -207,5 +259,28 @@ function CommentRow({
         )}
       </div>
     </li>
+  );
+}
+
+/**
+ * A single reply, nested read-only under its parent's content column (see
+ * `CommentRow`'s own doc comment for why: replies are tied to their parent,
+ * not independently actionable). Reuses the root row's own name/time/body
+ * typography so it reads as the same kind of content, just visually
+ * subordinate — no `seq` badge (replies never get a pin number) and no
+ * action icons. It renders inside `CommentRow`'s `pointer-events-none`
+ * content column and adds none of its own, so — like the rest of that
+ * column — a click passes through to the row's full-bleed select button
+ * underneath and selects the parent pin.
+ */
+function ReplyEntry({ comment }: { comment: VariationComment }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="truncate text-sm font-medium text-primary">{commentDisplayName(comment)}</span>
+        <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
+      </div>
+      <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
+    </div>
   );
 }

@@ -130,6 +130,12 @@ export type VariationComment = {
    * first comment on a variation is always 1, the second always 2, etc.,
    * regardless of deletes elsewhere in the list. See createComment. */
   seq: number;
+  /** Null for a root pin comment (what gets a numbered pin marker on the
+   * stage — see annotation-layer.tsx); otherwise the id of the root comment
+   * this row replies to (KEV-183). Threads are flat — a reply's own id can
+   * never appear as another row's parentCommentId, enforced server-side by
+   * createReply below. */
+  parentCommentId: string | null;
 };
 
 /**
@@ -220,6 +226,7 @@ export async function getVoterDetail(
       offsetY: comments.offsetY,
       status: comments.status,
       seq: comments.seq,
+      parentCommentId: comments.parentCommentId,
     })
     .from(comments)
     .innerJoin(variations, eq(variations.id, comments.variationId))
@@ -257,6 +264,7 @@ export async function getVoterDetail(
         offsetY: c.offsetY,
         status: c.status,
         seq: c.seq,
+        parentCommentId: c.parentCommentId,
       })),
   }));
 
@@ -366,6 +374,66 @@ export async function createComment(
     .values({ id, seq: bumped.commentSeq, ...input })
     .returning();
   return comment;
+}
+
+export type CreateReplyResult =
+  | { ok: true; comment: Comment }
+  | { ok: false; error: "parent_not_found" | "parent_not_root" };
+
+/**
+ * Creates a flat-thread reply to a root pin comment (KEV-183). Unlike
+ * createComment above, a reply:
+ *  - does NOT bump variations.commentSeq, and is inserted with `seq` left at
+ *    its column default (0) — it's never assigned a real pin number because
+ *    it's never rendered as its own pin (annotation-layer.tsx only turns
+ *    parentCommentId === null rows into markers).
+ *  - reuses the caller's viewerId/voterName the same way a root comment does.
+ *
+ * Server-side flat-thread enforcement (the DB's FK alone can't express "the
+ * parent must itself be a root"): rejects with `"parent_not_found"` when
+ * `parentCommentId` doesn't resolve to a comment on this exact variation, and
+ * `"parent_not_root"` when it resolves but is itself a reply — no
+ * reply-to-a-reply. The caller (the comments POST route) maps either to a 4xx.
+ */
+export async function createReply(
+  db: Database,
+  input: {
+    variationId: string;
+    viewerId: string;
+    comment: string;
+    voterName?: string;
+    parentCommentId: string;
+  }
+): Promise<CreateReplyResult> {
+  const [parent] = await db
+    .select({
+      id: comments.id,
+      variationId: comments.variationId,
+      parentCommentId: comments.parentCommentId,
+    })
+    .from(comments)
+    .where(eq(comments.id, input.parentCommentId));
+
+  if (!parent || parent.variationId !== input.variationId) {
+    return { ok: false, error: "parent_not_found" };
+  }
+  if (parent.parentCommentId !== null) {
+    return { ok: false, error: "parent_not_root" };
+  }
+
+  const id = newId();
+  const [comment] = await db
+    .insert(comments)
+    .values({
+      id,
+      variationId: input.variationId,
+      viewerId: input.viewerId,
+      comment: input.comment,
+      voterName: input.voterName,
+      parentCommentId: input.parentCommentId,
+    })
+    .returning();
+  return { ok: true, comment };
 }
 
 /**

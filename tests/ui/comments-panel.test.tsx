@@ -45,6 +45,7 @@ function makeComment(overrides: Partial<VariationComment>): VariationComment {
     offsetY: null,
     status: "open",
     seq: 1,
+    parentCommentId: null,
     ...overrides,
   };
 }
@@ -286,5 +287,121 @@ describe("CommentsPanel", () => {
   it("shows a failed complete/delete error", () => {
     render(<CommentsPanel variation={makeVariation({})} commentError="Couldn't update this comment. Please try again." />);
     expect(screen.getByText(/couldn.t update this comment/i)).toBeInTheDocument();
+  });
+
+  // KEV-183 follow-up: replies (parentCommentId !== null) render nested
+  // under their parent's row instead of being dropped from the panel.
+  describe("reply threading", () => {
+    it("renders a reply nested under its parent, in chronological order", () => {
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [
+              makeComment({ id: "root", comment: "root comment", seq: 1, createdAt: new Date("2024-01-01T00:00:00Z") }),
+              makeComment({
+                id: "reply2",
+                comment: "second reply",
+                voterName: "Bo",
+                parentCommentId: "root",
+                createdAt: new Date("2024-01-01T00:02:00Z"),
+              }),
+              makeComment({
+                id: "reply1",
+                comment: "first reply",
+                voterName: "Amy",
+                parentCommentId: "root",
+                createdAt: new Date("2024-01-01T00:01:00Z"),
+              }),
+            ],
+          })}
+        />
+      );
+      const rootItem = screen.getByText("root comment").closest("li");
+      expect(rootItem).not.toBeNull();
+      expect(rootItem).toHaveTextContent("first reply");
+      expect(rootItem).toHaveTextContent("second reply");
+      expect(rootItem).toHaveTextContent("Amy");
+      expect(rootItem).toHaveTextContent("Bo");
+      // Chronological (oldest first), matching annotation-layer.tsx's own
+      // repliesByParentId ordering — "first reply" before "second reply".
+      const html = rootItem?.innerHTML ?? "";
+      expect(html.indexOf("first reply")).toBeLessThan(html.indexOf("second reply"));
+    });
+
+    it("shows no complete/delete controls or pin-number badge on a reply, even while the voter is active", () => {
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [
+              makeComment({ id: "root", comment: "root comment", seq: 5 }),
+              makeComment({ id: "reply1", comment: "a reply", parentCommentId: "root" }),
+            ],
+          })}
+          voterStatus="active"
+          onToggleCommentStatus={() => {}}
+          onRequestDeleteComment={() => {}}
+        />
+      );
+      // Only one "5" badge exists (the root's own) — a reply gets no
+      // pin-number badge of its own.
+      expect(screen.getAllByText("5")).toHaveLength(1);
+      // Only the root's own complete/delete controls exist — a reply gets
+      // none of its own.
+      expect(screen.getAllByLabelText(/mark comment complete/i)).toHaveLength(1);
+      expect(screen.getAllByLabelText(/^delete comment$/i)).toHaveLength(1);
+    });
+
+    it("does not change the root row's own action controls when it has replies", () => {
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [
+              makeComment({ id: "root", comment: "root comment", seq: 1 }),
+              makeComment({ id: "reply1", comment: "a reply", parentCommentId: "root" }),
+            ],
+          })}
+          voterStatus="active"
+          onToggleCommentStatus={() => {}}
+          onRequestDeleteComment={() => {}}
+        />
+      );
+      expect(screen.getByLabelText(/mark comment complete/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^delete comment$/i)).toBeInTheDocument();
+      expect(screen.getByText("1")).toBeInTheDocument();
+    });
+
+    it("carries a root's replies along when the root is completed and dimmed", () => {
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [
+              makeComment({ id: "root", comment: "root comment", seq: 1, status: "complete" }),
+              makeComment({ id: "reply1", comment: "a reply", parentCommentId: "root" }),
+            ],
+          })}
+        />
+      );
+      const rootItem = screen.getByText("root comment").closest("li");
+      expect(rootItem).toHaveClass("opacity-50");
+      expect(rootItem).toHaveTextContent("a reply");
+    });
+
+    it("selects the parent pin when clicking within a reply's area", async () => {
+      const user = userEvent.setup();
+      const onSelectPin = vi.fn();
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [
+              makeComment({ id: "root", comment: "root comment", seq: 1 }),
+              makeComment({ id: "reply1", comment: "a reply", parentCommentId: "root" }),
+            ],
+          })}
+          onSelectPin={onSelectPin}
+        />
+      );
+      await user.click(screen.getByLabelText(/select pin 1 on the stage/i));
+      expect(onSelectPin).toHaveBeenCalledWith("root");
+    });
   });
 });
