@@ -289,10 +289,13 @@ describe("CommentsPanel", () => {
     expect(screen.getByText(/couldn.t update this comment/i)).toBeInTheDocument();
   });
 
-  // KEV-183 follow-up: replies (parentCommentId !== null) render nested
-  // under their parent's row instead of being dropped from the panel.
+  // KEV-183 follow-up (superseded by KEV-188's comp redesign below): a
+  // reply (parentCommentId !== null) no longer renders inline under its
+  // parent's row here — the full thread lives on the pin's own expanded
+  // card (annotation-layer.tsx) — but its existence still surfaces on the
+  // root row as a "N replies" count.
   describe("reply threading", () => {
-    it("renders a reply nested under its parent, in chronological order", () => {
+    it("shows a 'N replies' count on the parent row instead of rendering replies inline", () => {
       render(
         <CommentsPanel
           variation={makeVariation({
@@ -318,14 +321,41 @@ describe("CommentsPanel", () => {
       );
       const rootItem = screen.getByText("root comment").closest("li");
       expect(rootItem).not.toBeNull();
-      expect(rootItem).toHaveTextContent("first reply");
-      expect(rootItem).toHaveTextContent("second reply");
-      expect(rootItem).toHaveTextContent("Amy");
-      expect(rootItem).toHaveTextContent("Bo");
-      // Chronological (oldest first), matching annotation-layer.tsx's own
-      // repliesByParentId ordering — "first reply" before "second reply".
-      const html = rootItem?.innerHTML ?? "";
-      expect(html.indexOf("first reply")).toBeLessThan(html.indexOf("second reply"));
+      expect(rootItem).toHaveTextContent("2 replies");
+      // Reply content/authors themselves aren't rendered in this panel
+      // anymore (KEV-188) — only the count is.
+      expect(rootItem).not.toHaveTextContent("first reply");
+      expect(rootItem).not.toHaveTextContent("second reply");
+      expect(rootItem).not.toHaveTextContent("Amy");
+      expect(rootItem).not.toHaveTextContent("Bo");
+    });
+
+    it("shows singular '1 reply' for exactly one reply", () => {
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [
+              makeComment({ id: "root", comment: "root comment", seq: 1 }),
+              makeComment({ id: "reply1", comment: "a reply", parentCommentId: "root" }),
+            ],
+          })}
+        />
+      );
+      const rootItem = screen.getByText("root comment").closest("li");
+      expect(rootItem).toHaveTextContent("1 reply");
+      expect(rootItem).not.toHaveTextContent("1 replies");
+    });
+
+    it("shows no replies indicator when a root has no replies", () => {
+      render(
+        <CommentsPanel
+          variation={makeVariation({
+            comments: [makeComment({ id: "root", comment: "root comment", seq: 1 })],
+          })}
+        />
+      );
+      const rootItem = screen.getByText("root comment").closest("li");
+      expect(rootItem).not.toHaveTextContent("reply");
     });
 
     it("shows no complete/delete controls or pin-number badge on a reply, even while the voter is active", () => {
@@ -370,7 +400,7 @@ describe("CommentsPanel", () => {
       expect(screen.getByText("1")).toBeInTheDocument();
     });
 
-    it("carries a root's replies along when the root is completed and dimmed", () => {
+    it("carries a root's reply count along when the root is completed and dimmed", () => {
       render(
         <CommentsPanel
           variation={makeVariation({
@@ -383,7 +413,7 @@ describe("CommentsPanel", () => {
       );
       const rootItem = screen.getByText("root comment").closest("li");
       expect(rootItem).toHaveClass("opacity-50");
-      expect(rootItem).toHaveTextContent("a reply");
+      expect(rootItem).toHaveTextContent("1 reply");
     });
 
     it("selects the parent pin when clicking within a reply's area", async () => {

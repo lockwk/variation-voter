@@ -116,7 +116,7 @@ export function CommentsPanel({
       {commentError && <p className="shrink-0 text-xs text-error-primary">{commentError}</p>}
 
       <div className="relative flex-1 min-h-0">
-        <ul ref={listRef} className="flex h-full flex-col gap-4 overflow-y-auto scrollbar-hide">
+        <ul ref={listRef} className="flex h-full flex-col overflow-y-auto scrollbar-hide">
           {!variation || !hasAnyPins ? (
             <li className="mt-3 text-center text-sm text-[#A1A1AA]">No comments yet.</li>
           ) : (
@@ -125,21 +125,29 @@ export function CommentsPanel({
                   open+completed) so a pin moving from open to completed (or
                   back) genuinely exits one list and enters the other — the
                   same physical feel as a row landing in a new place, not a
-                  single list silently reordering itself. `initial={false}`
-                  keeps rows already on screen from popping in on first mount
-                  (variation switch, page load); only a row that's actually
-                  newly added/removed animates. */}
-              <AnimatePresence mode="popLayout" initial={false}>
+                  single list silently reordering itself.
+
+                  `key={variation.id}` remounts each scope on a variation
+                  switch: `initial={false}` only suppresses the enter/`layout`
+                  animation on an AnimatePresence's *own first mount*, NOT on a
+                  prop-driven content swap while it stays mounted — so without
+                  the key, switching variations wrongly runs enter+layout for
+                  the incoming rows (a row starts partway down where the old,
+                  taller list sat, then slides up). Remounting makes a
+                  variation switch a clean cut — new comments render at rest at
+                  the top — while add/complete/delete *within* a variation
+                  keeps the same key and still animates. */}
+              <AnimatePresence key={variation.id} mode="popLayout" initial={false}>
                 {openPins.map((item) => (
                   <CommentRow key={item.id} {...rowProps(item, "complete")} />
                 ))}
               </AnimatePresence>
               {completedPins.length > 0 && (
-                <li className="-mb-2 px-3 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]">
+                <li className="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]">
                   Completed
                 </li>
               )}
-              <AnimatePresence mode="popLayout" initial={false}>
+              <AnimatePresence key={`${variation.id}-completed`} mode="popLayout" initial={false}>
                 {completedPins.map((item) => (
                   <CommentRow key={item.id} dimmed {...rowProps(item, "open")} />
                 ))}
@@ -169,15 +177,15 @@ function commentDisplayName(comment: VariationComment): string {
 }
 
 /**
- * A pin's root comment row, plus (KEV-183) its flat-thread replies nested
- * read-only underneath the root body. Replies are tied to their parent, not
- * independently actionable — confirmed product decision: no delete, no
- * complete, no pin-number badge, and clicking anywhere in a reply (or
- * anywhere else in this `<li>`) selects the parent pin, not the reply,
- * because they share the same full-bleed select `<button>` below. A reply
- * therefore needs no `onSelect`/`onRequestDelete`/`onToggleStatus` of its
- * own — it's rendered by a separate, deliberately narrower component
- * (`ReplyEntry`) rather than reusing `CommentRow` itself.
+ * A pin's root comment row (KEV-188 comp redesign). Replies (KEV-183's
+ * flat-thread model) no longer render inline here — the full thread still
+ * lives on the pin's own expanded card (annotation-layer.tsx); this panel
+ * now only surfaces a "N replies" count, computed from `replies`, so the
+ * row stays a compact single card. `replies` is otherwise unused (no
+ * per-reply rendering), and a reply itself still has no independent
+ * `onSelect`/`onRequestDelete`/`onToggleStatus` of its own — clicking
+ * anywhere in this row selects the parent pin via the shared full-bleed
+ * select `<button>` below.
  */
 function CommentRow({
   comment,
@@ -190,9 +198,9 @@ function CommentRow({
   onToggleStatus,
 }: {
   comment: VariationComment;
-  /** This root comment's replies, oldest first — same ordering as
-   * annotation-layer.tsx's own `repliesByParentId` (see comments-panel's
-   * copy above), so the panel and the pin's expanded card agree. */
+  /** This root comment's replies — only their count is shown now (the "N
+   * replies" indicator); the full thread lives on the stage's pin card
+   * (annotation-layer.tsx). */
   replies: VariationComment[];
   dimmed?: boolean;
   isSelected: boolean;
@@ -213,97 +221,87 @@ function CommentRow({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
-      className={cx("relative rounded-lg transition-opacity", dimmed && "opacity-50")}
+      className={cx("relative transition-opacity", dimmed && "opacity-50")}
     >
       {/* Same "full-bleed button underneath, content layered on top in a
           pointer-events-none overlay" pattern as variation-list.tsx's row
           selection — lets the row itself be one click target (select this
           pin, echoed on the stage — KEV-172 polish pass item 1) while the
           trailing action icons stay independent clickable targets, without
-          nesting a <button> inside this one. A ring plus `aria-pressed`
-          alongside the background fill means selection isn't conveyed by
-          color alone. */}
+          nesting a <button> inside this one. `aria-pressed` alongside the
+          background fill means selection isn't conveyed by color alone. */}
       <button
         type="button"
         onClick={onSelect}
         aria-pressed={isSelected}
         aria-label={`Select pin ${comment.seq} on the stage: ${comment.comment}`}
-        className={cx(
-          "absolute inset-0 h-full w-full rounded-lg outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
-          isSelected ? "bg-[#424242] ring-1 ring-inset ring-[#E8E8E8]" : "hover:bg-[#2B2B2B]"
-        )}
+        className="peer absolute inset-0 h-full w-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       />
-      <div className="relative flex items-start gap-2 py-2 pl-3 pr-2 pointer-events-none">
-        <span
-          aria-hidden="true"
-          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-[#212121] bg-[#FACC15] text-[10px] font-semibold text-[#212121]"
-        >
-          {comment.seq}
-        </span>
-        <div className="min-w-0 flex-1 flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-primary">{commentDisplayName(comment)}</span>
-            <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
+      {/* The card rests transparent so it reads as the panel's own surface
+          (KEV-188 review: no distinct fill behind a comment) — only the
+          divider separates rows. The selected/hover treatment lives here on
+          the content div rather than the select button underneath: because
+          the content stays `pointer-events-none`, the button is still what
+          receives the pointer, but its fill would sit *below* this div, so
+          `isSelected` swaps the fill directly here (hover #333333, selected
+          #3C3C3C) and hover is picked up via Tailwind's `peer`. Selection
+          also carries `aria-pressed` on the button, so dropping the ring
+          (KEV-188 review) doesn't make it color-only for assistive tech. */}
+      <div
+        className={cx(
+          "relative flex flex-col gap-3 border-b border-[#373737] pt-3 pr-3 pb-3.5 pl-3 pointer-events-none transition-colors",
+          isSelected ? "bg-[#3C3C3C]" : "peer-hover:bg-[#333333]"
+        )}
+      >
+        {/* Name + timestamp are one tight group (2px apart, per comp 2K0-0);
+            the 12px container gap sits only between this group and the body. */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex h-5 items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#FFF700] text-[10px] leading-4 font-medium text-black"
+            >
+              {comment.seq}
+            </span>
+            <span className="flex-grow truncate text-xs leading-4 font-medium text-white/65">{commentDisplayName(comment)}</span>
+            {canManage && (
+              <div className="pointer-events-auto mr-1 flex shrink-0 items-center gap-2">
+                <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
+                  <TooltipTrigger
+                    aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
+                    onPress={onToggleStatus}
+                    className="flex size-6 items-center justify-center rounded-[4px] text-white/50 hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
+                  >
+                    {comment.status === "open" ? (
+                      <CheckCircle aria-hidden="true" className="size-3.5" />
+                    ) : (
+                      <RefreshCcw01 aria-hidden="true" className="size-3.5" />
+                    )}
+                  </TooltipTrigger>
+                </Tooltip>
+                <Tooltip title="Delete" placement="top">
+                  <TooltipTrigger
+                    aria-label="Delete comment"
+                    onPress={onRequestDelete}
+                    className="flex size-6 items-center justify-center rounded-[4px] text-white/50 hover:bg-[#3F3F46] hover:text-error-primary"
+                  >
+                    <Trash01 aria-hidden="true" className="size-3.5" />
+                  </TooltipTrigger>
+                </Tooltip>
+              </div>
+            )}
           </div>
-          <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
+          <span className="pl-[22px] text-xs leading-4 font-medium text-white/50">{relativeTimeFrom(comment.createdAt)}</span>
+        </div>
+        <div className="flex flex-col gap-1.5 pl-[22px]">
+          <p className="line-clamp-3 text-[13px] leading-[18px] whitespace-pre-wrap text-white/90">{comment.comment}</p>
           {replies.length > 0 && (
-            <div className="mt-1 flex flex-col gap-2 border-l border-[#3F3F46] pl-2.5">
-              {replies.map((reply) => (
-                <ReplyEntry key={reply.id} comment={reply} />
-              ))}
-            </div>
+            <span className="text-xs leading-4 font-medium text-white/50">
+              {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
+            </span>
           )}
         </div>
-        {canManage && (
-          <div className="pointer-events-auto flex shrink-0 items-center gap-1">
-            <Tooltip title={comment.status === "open" ? "Complete" : "Reopen"} placement="top">
-              <TooltipTrigger
-                aria-label={comment.status === "open" ? "Mark comment complete" : "Reopen comment"}
-                onPress={onToggleStatus}
-                className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-[#E8E8E8]"
-              >
-                {comment.status === "open" ? (
-                  <CheckCircle aria-hidden="true" className="size-4" />
-                ) : (
-                  <RefreshCcw01 aria-hidden="true" className="size-4" />
-                )}
-              </TooltipTrigger>
-            </Tooltip>
-            <Tooltip title="Delete" placement="top">
-              <TooltipTrigger
-                aria-label="Delete comment"
-                onPress={onRequestDelete}
-                className="flex size-6 items-center justify-center rounded-[4px] text-[#A1A1AA] hover:bg-[#3F3F46] hover:text-error-primary"
-              >
-                <Trash01 aria-hidden="true" className="size-4" />
-              </TooltipTrigger>
-            </Tooltip>
-          </div>
-        )}
       </div>
     </motion.li>
-  );
-}
-
-/**
- * A single reply, nested read-only under its parent's content column (see
- * `CommentRow`'s own doc comment for why: replies are tied to their parent,
- * not independently actionable). Reuses the root row's own name/time/body
- * typography so it reads as the same kind of content, just visually
- * subordinate — no `seq` badge (replies never get a pin number) and no
- * action icons. It renders inside `CommentRow`'s `pointer-events-none`
- * content column and adds none of its own, so — like the rest of that
- * column — a click passes through to the row's full-bleed select button
- * underneath and selects the parent pin.
- */
-function ReplyEntry({ comment }: { comment: VariationComment }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <span className="truncate text-sm font-medium text-primary">{commentDisplayName(comment)}</span>
-        <span className="shrink-0 text-sm text-tertiary">{relativeTimeFrom(comment.createdAt)}</span>
-      </div>
-      <p className="whitespace-pre-wrap text-sm font-medium text-primary">{comment.comment}</p>
-    </div>
   );
 }
