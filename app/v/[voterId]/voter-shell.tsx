@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Menu02 } from "@untitledui/icons";
+import { MotionConfig } from "motion/react";
 import { ConfirmDialog } from "@/components/application/confirm-dialog";
 import type { Comment, VoterDetail, VoteDirection } from "@/db/queries";
 import { computeOptimisticVote } from "@/lib/optimistic-vote";
 import { type SortMode } from "./variation-list";
 import { Rail } from "./rail";
 import { Stage } from "./stage";
+import { HOUSE_SPRING } from "./motion-config";
 
 export function VoterShell({
   voter,
@@ -289,70 +291,78 @@ export function VoterShell({
   }
 
   return (
-    <div className="flex h-dvh">
-      {isNavOpen && (
-        <button
-          type="button"
-          aria-label="Close menu"
-          onClick={closeNav}
-          className="fixed inset-0 z-30 bg-overlay/50 md:hidden"
-        />
-      )}
-      <Rail
-        variations={variations}
-        selected={selected}
-        selectedId={selectedId}
-        sortMode={sortMode}
-        onSelect={selectVariation}
-        onSortModeChange={setSortMode}
-        onVote={castVote}
-        votingId={votingId}
-        voteError={voteError}
-        voterStatus={voter.status}
-        isOpen={isNavOpen}
-        onClose={closeNav}
-        commentError={commentError}
-        selectedPinId={selectedPinId}
-        onSelectPin={selectPin}
-        onToggleCommentStatus={toggleCommentStatus}
-        onRequestDeleteComment={requestDeleteComment}
-      />
-      <div className="flex flex-1 min-w-0 flex-col">
-        <button
-          ref={menuButtonRef}
-          type="button"
-          aria-label="Open variation menu"
-          onClick={() => setIsNavOpen(true)}
-          className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-secondary text-secondary hover:text-primary"
-        >
-          <Menu02 className="size-5 shrink-0" />
-          <span className="truncate font-medium">{voter.title}</span>
-        </button>
-        <Stage
-          variation={selected}
-          voterId={voter.id}
+    // `reducedMotion="user"` makes every Motion animation in this subtree
+    // respect the OS-level "reduce motion" setting automatically (dropping
+    // transform-based movement, keeping opacity) — no per-component
+    // motion-reduce: branching needed for anything animated via Motion. The
+    // house spring below is this UI's one shared default transition; a
+    // component only overrides it when it genuinely needs something else.
+    <MotionConfig reducedMotion="user" transition={HOUSE_SPRING}>
+      <div className="flex h-dvh">
+        {isNavOpen && (
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={closeNav}
+            className="fixed inset-0 z-30 bg-overlay/50 md:hidden"
+          />
+        )}
+        <Rail
+          variations={variations}
+          selected={selected}
+          selectedId={selectedId}
+          sortMode={sortMode}
+          onSelect={selectVariation}
+          onSortModeChange={setSortMode}
+          onVote={castVote}
+          votingId={votingId}
+          voteError={voteError}
           voterStatus={voter.status}
-          voterName={voterName}
-          onVoterNameChange={setVoterName}
-          onCommentSubmit={appendComment}
-          onReplySubmit={submitReply}
+          isOpen={isNavOpen}
+          onClose={closeNav}
+          commentError={commentError}
           selectedPinId={selectedPinId}
           onSelectPin={selectPin}
-          onDeselectPin={deselectPin}
           onToggleCommentStatus={toggleCommentStatus}
           onRequestDeleteComment={requestDeleteComment}
         />
+        <div className="flex flex-1 min-w-0 flex-col">
+          <button
+            ref={menuButtonRef}
+            type="button"
+            aria-label="Open variation menu"
+            onClick={() => setIsNavOpen(true)}
+            className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-secondary text-secondary hover:text-primary"
+          >
+            <Menu02 className="size-5 shrink-0" />
+            <span className="truncate font-medium">{voter.title}</span>
+          </button>
+          <Stage
+            variation={selected}
+            voterId={voter.id}
+            voterStatus={voter.status}
+            voterName={voterName}
+            onVoterNameChange={setVoterName}
+            onCommentSubmit={appendComment}
+            onReplySubmit={submitReply}
+            selectedPinId={selectedPinId}
+            onSelectPin={selectPin}
+            onDeselectPin={deselectPin}
+            onToggleCommentStatus={toggleCommentStatus}
+            onRequestDeleteComment={requestDeleteComment}
+          />
+        </div>
+        <ConfirmDialog
+          isOpen={pendingDeleteComment !== null}
+          title="Delete comment"
+          message="Are you sure you want to delete this comment? This cannot be undone."
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          isDestructive
+          onConfirm={confirmDeleteComment}
+          onClose={cancelDeleteComment}
+        />
       </div>
-      <ConfirmDialog
-        isOpen={pendingDeleteComment !== null}
-        title="Delete comment"
-        message="Are you sure you want to delete this comment? This cannot be undone."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        isDestructive
-        onConfirm={confirmDeleteComment}
-        onClose={cancelDeleteComment}
-      />
-    </div>
+    </MotionConfig>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { CheckCircle, RefreshCcw01, Trash01 } from "@untitledui/icons";
+import { AnimatePresence, motion } from "motion/react";
 import { cx } from "@/utils/cx";
 import { relativeTimeFrom } from "@/lib/relative-time";
 import { Tooltip, TooltipTrigger } from "@/components/base/tooltip/tooltip";
@@ -120,17 +121,29 @@ export function CommentsPanel({
             <li className="mt-3 text-center text-sm text-[#A1A1AA]">No comments yet.</li>
           ) : (
             <>
-              {openPins.map((item) => (
-                <CommentRow key={item.id} {...rowProps(item, "complete")} />
-              ))}
+              {/* Two separate AnimatePresence scopes (not one shared across
+                  open+completed) so a pin moving from open to completed (or
+                  back) genuinely exits one list and enters the other — the
+                  same physical feel as a row landing in a new place, not a
+                  single list silently reordering itself. `initial={false}`
+                  keeps rows already on screen from popping in on first mount
+                  (variation switch, page load); only a row that's actually
+                  newly added/removed animates. */}
+              <AnimatePresence mode="popLayout" initial={false}>
+                {openPins.map((item) => (
+                  <CommentRow key={item.id} {...rowProps(item, "complete")} />
+                ))}
+              </AnimatePresence>
               {completedPins.length > 0 && (
                 <li className="-mb-2 px-3 text-xs font-semibold uppercase tracking-[0.04em] text-[#71717A]">
                   Completed
                 </li>
               )}
-              {completedPins.map((item) => (
-                <CommentRow key={item.id} dimmed {...rowProps(item, "open")} />
-              ))}
+              <AnimatePresence mode="popLayout" initial={false}>
+                {completedPins.map((item) => (
+                  <CommentRow key={item.id} dimmed {...rowProps(item, "open")} />
+                ))}
+              </AnimatePresence>
             </>
           )}
         </ul>
@@ -191,7 +204,17 @@ function CommentRow({
   onToggleStatus: () => void;
 }) {
   return (
-    <li className={cx("relative rounded-lg transition-opacity", dimmed && "opacity-50")}>
+    // `layout` lets the remaining rows glide into place (rather than snap)
+    // as an AnimatePresence sibling enters/exits above them; initial/animate/
+    // exit are a gentle fade + small vertical slide — the transition itself
+    // is inherited from voter-shell.tsx's <MotionConfig> house spring.
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 8 }}
+      className={cx("relative rounded-lg transition-opacity", dimmed && "opacity-50")}
+    >
       {/* Same "full-bleed button underneath, content layered on top in a
           pointer-events-none overlay" pattern as variation-list.tsx's row
           selection — lets the row itself be one click target (select this
@@ -258,7 +281,7 @@ function CommentRow({
           </div>
         )}
       </div>
-    </li>
+    </motion.li>
   );
 }
 

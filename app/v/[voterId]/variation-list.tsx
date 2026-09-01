@@ -1,6 +1,7 @@
 "use client";
 
 import { ThumbsDown, ThumbsUp } from "@untitledui/icons";
+import { AnimatePresence, motion } from "motion/react";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { cx } from "@/utils/cx";
 import { ThumbUpVoted, ThumbDownVoted } from "./voted-thumb-icons";
@@ -90,62 +91,76 @@ export function VariationList({
           shrinks to fit and the ul's overflow-y-auto scrolls as needed. */}
       <div className="relative flex-auto min-h-0">
         <ul ref={listRef} className="h-full overflow-y-auto flex flex-col gap-0.5 scrollbar-hide">
-          {sorted.map((variation) => {
-            const isSelected = variation.id === selectedId;
-            const disabled = voterStatus === "archived" || votingId === variation.id;
-            return (
-              <li key={variation.id}>
-                {/* The whole row is a single selection target: a full-bleed
-                    button underneath the visible content (F5/bugfix). The
-                    row's title + padding + gaps + non-selected vote counts
-                    all sit in a pointer-events-none overlay so clicks on any
-                    of them fall through to this button instead of landing in
-                    dead space. Only the SELECTED row's real vote buttons
-                    re-enable pointer events, so they stay independently
-                    clickable without ever nesting a <button> inside this
-                    one. */}
-                <div className="relative rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => onSelect(variation.id)}
-                    aria-current={isSelected}
-                    aria-label={`V${positionRank.get(variation.id)} ${variation.title}`}
-                    className={cx(
-                      "absolute inset-0 h-full w-full rounded-lg outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
-                      isSelected ? "bg-[#424242]" : "bg-[#2B2B2B] hover:bg-[#424242]"
-                    )}
-                  />
-                  <div className="relative flex items-center justify-between gap-2 pl-3 pr-2 py-2 pointer-events-none">
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                      <span className="text-[#A1A1AA]">V{positionRank.get(variation.id)}</span>{" "}
-                      <span className="text-[#E8E8E8]">{variation.title}</span>
-                    </span>
-                    <div className={cx("flex shrink-0 items-center", isSelected && "pointer-events-auto")}>
-                      <span className="sr-only">
-                        {variation.up} upvotes, {variation.down} downvotes
+          {/* `initial={false}` skips the mount pop-in for rows already on
+              screen (page load, switching sort mode's underlying data isn't
+              add/remove); `layout` lets a row glide to its new slot — both
+              on sort-mode reorders and when a sibling row enters/exits above
+              it — instead of snapping. The transition itself is inherited
+              from voter-shell.tsx's <MotionConfig> house spring. */}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {sorted.map((variation) => {
+              const isSelected = variation.id === selectedId;
+              const disabled = voterStatus === "archived" || votingId === variation.id;
+              return (
+                <motion.li
+                  key={variation.id}
+                  layout
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                >
+                  {/* The whole row is a single selection target: a full-bleed
+                      button underneath the visible content (F5/bugfix). The
+                      row's title + padding + gaps + non-selected vote counts
+                      all sit in a pointer-events-none overlay so clicks on any
+                      of them fall through to this button instead of landing in
+                      dead space. Only the SELECTED row's real vote buttons
+                      re-enable pointer events, so they stay independently
+                      clickable without ever nesting a <button> inside this
+                      one. */}
+                  <div className="relative rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => onSelect(variation.id)}
+                      aria-current={isSelected}
+                      aria-label={`V${positionRank.get(variation.id)} ${variation.title}`}
+                      className={cx(
+                        "absolute inset-0 h-full w-full rounded-lg outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
+                        isSelected ? "bg-[#424242]" : "bg-[#2B2B2B] hover:bg-[#424242]"
+                      )}
+                    />
+                    <div className="relative flex items-center justify-between gap-2 pl-3 pr-2 py-2 pointer-events-none">
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        <span className="text-[#A1A1AA]">V{positionRank.get(variation.id)}</span>{" "}
+                        <span className="text-[#E8E8E8]">{variation.title}</span>
                       </span>
-                      <div className="flex items-center gap-0.5">
-                        <VoteSegment
-                          direction="up"
-                          variation={variation}
-                          isSelected={isSelected}
-                          disabled={disabled}
-                          onVote={onVote}
-                        />
-                        <VoteSegment
-                          direction="down"
-                          variation={variation}
-                          isSelected={isSelected}
-                          disabled={disabled}
-                          onVote={onVote}
-                        />
+                      <div className={cx("flex shrink-0 items-center", isSelected && "pointer-events-auto")}>
+                        <span className="sr-only">
+                          {variation.up} upvotes, {variation.down} downvotes
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <VoteSegment
+                            direction="up"
+                            variation={variation}
+                            isSelected={isSelected}
+                            disabled={disabled}
+                            onVote={onVote}
+                          />
+                          <VoteSegment
+                            direction="down"
+                            variation={variation}
+                            isSelected={isSelected}
+                            disabled={disabled}
+                            onVote={onVote}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </li>
-            );
-          })}
+                </motion.li>
+              );
+            })}
+          </AnimatePresence>
         </ul>
         {showFade && (
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-8" style={SCROLL_FADE_STYLE} />
