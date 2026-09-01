@@ -176,6 +176,12 @@
     --color-brand-900: var(--color-neutral-900);
     --color-brand-950: var(--color-neutral-950);
 
+    /* Primary brand/accent color (KEV-199 redesign). The app's one saturated
+       accent — distinct from the neutral --color-brand-* aliases above, which
+       must stay zinc for existing UI. Same value in light and dark mode, so
+       no .dark-mode override is defined for it. */
+    --color-accent: #00d7a7;
+
     /* LIGHT MODE VARIABLES */
 
     --color-alpha-white: rgb(255 255 255);

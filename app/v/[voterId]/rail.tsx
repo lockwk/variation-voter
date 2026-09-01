@@ -1,6 +1,6 @@
 "use client";
 
-import { Target04, X } from "@untitledui/icons";
+import { X } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 import { VariationList, type SortMode } from "./variation-list";
 import { CommentsPanel } from "./comments-panel";
@@ -55,7 +55,7 @@ export function Rail({
   return (
     <nav
       className={cx(
-        "w-[375px] shrink-0 flex flex-col gap-3 bg-[#212121] pt-2 pb-3 px-3",
+        "w-[320px] shrink-0 flex flex-col gap-3 bg-[#212121] pt-2 pb-3 px-3",
         // A2: drop shadow separating the rail from the media pane, in addition to the border.
         "shadow-[0_8px_20px_#00000033]",
         // When closed on mobile, invisible (not just translated off-screen) keeps
@@ -101,24 +101,70 @@ export function Rail({
 
 // C1: fixed VARIVO product wordmark replaces the per-voter title in the rail
 // header. The mobile-only close button keeps the drawer dismissible.
+// KEV-199: redesigned header row — pixel-grid mark + wordmark on the left,
+// "EARLY ACCESS" (now muted, not brand-green) and the close button grouped
+// on the right so `justify-between` pushes that whole cluster to the edge.
 function RailHeader({ onClose }: { onClose: () => void }) {
   return (
     <div className="shrink-0 flex items-center justify-between border-b border-[#3F3F46] pb-[7px]">
       <div className="flex items-center gap-1">
-        <Target04 aria-hidden="true" className="size-4" color="#E8E8E8" />
-        <span className="text-xs font-semibold tracking-[0.04em]">
-          <span className="text-[#E8E8E8]">VARIVO</span>
-          <span className="text-[#00E578]"> EARLY ACCESS</span>
+        <LogoMark />
+        <span className="font-body text-xs font-semibold tracking-[0.1em] text-[#FFFFFFE6]">
+          VARIVO
         </span>
       </div>
-      <button
-        type="button"
-        aria-label="Close menu"
-        onClick={onClose}
-        className="md:hidden shrink-0 p-1 -m-1 text-tertiary hover:text-secondary"
-      >
-        <X className="size-5" />
-      </button>
+      <div className="flex items-center gap-2">
+        <span className="font-body text-xs font-semibold tracking-[0.1em] text-[#FFFFFF80]">
+          EARLY ACCESS
+        </span>
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={onClose}
+          className="md:hidden shrink-0 p-1 -m-1 text-tertiary hover:text-secondary"
+        >
+          <X className="size-5" />
+        </button>
+      </div>
     </div>
+  );
+}
+
+// 5-column x 4-row pixel grid, addressed as [col][row]; x/y below are the
+// literal offsets (px) of each cell within the 14x15 grid, per the KEV-199 comp.
+const LOGO_GRID_X = [0, 3, 6, 9, 12] as const;
+const LOGO_GRID_Y = [0, 4, 8, 12] as const;
+const LOGO_ACCENT_CELLS: readonly (readonly boolean[])[] = [
+  [true, true, false, false],
+  [false, false, true, false],
+  [false, false, false, true],
+  [false, false, true, false],
+  [true, true, false, false],
+];
+
+function LogoMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="relative size-5 shrink-0 overflow-hidden bg-[#212121]"
+    >
+      <span className="absolute left-[3px] top-[2px] h-[15px] w-[14px]">
+        {LOGO_GRID_X.map((x, col) =>
+          LOGO_GRID_Y.map((y, row) => (
+            <span
+              key={`${col}-${row}`}
+              className="absolute h-[3px] w-[2px]"
+              style={{
+                left: x,
+                top: y,
+                backgroundColor: LOGO_ACCENT_CELLS[col][row]
+                  ? "var(--color-accent)"
+                  : "#161616",
+              }}
+            />
+          ))
+        )}
+      </span>
+    </span>
   );
 }
