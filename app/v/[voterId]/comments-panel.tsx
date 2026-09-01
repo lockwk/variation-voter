@@ -116,7 +116,7 @@ export function CommentsPanel({
       {commentError && <p className="shrink-0 text-xs text-error-primary">{commentError}</p>}
 
       <div className="relative flex-1 min-h-0">
-        <ul ref={listRef} className="flex h-full flex-col overflow-y-auto scrollbar-hide">
+        <ul ref={listRef} className="flex h-full flex-col gap-0.5 overflow-y-auto scrollbar-hide">
           {!variation || !hasAnyPins ? (
             <li className="mt-3 text-center text-xs text-[#A1A1AA]">No comments yet.</li>
           ) : (
@@ -251,8 +251,10 @@ function CommentRow({
         className="peer absolute inset-0 h-full w-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring active:scale-100"
       />
       {/* The card rests transparent so it reads as the panel's own surface
-          (KEV-188 review: no distinct fill behind a comment) — only the
-          divider separates rows. The selected/hover treatment lives here on
+          (KEV-188 review: no distinct fill behind a comment) — rows are
+          separated by the list's 2px gap instead of a border (KEV-204), and
+          the rounded corners here mean the hover/selected fill reads as its
+          own card. The selected/hover treatment lives here on
           the content div rather than the select button underneath: because
           the content stays `pointer-events-none`, the button is still what
           receives the pointer, but its fill would sit *below* this div, so
@@ -262,7 +264,7 @@ function CommentRow({
           (KEV-188 review) doesn't make it color-only for assistive tech. */}
       <div
         className={cx(
-          "relative flex flex-col gap-3 border-b border-[#373737] pt-3 pr-3 pb-3.5 pl-3 pointer-events-none transition-colors",
+          "relative flex flex-col gap-3 rounded-[4px] pt-3 pr-3 pb-3.5 pl-3 pointer-events-none transition-colors",
           isSelected ? "bg-[#3C3C3C]" : "group-hover:bg-[#333333]"
         )}
       >

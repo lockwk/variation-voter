@@ -69,7 +69,6 @@ describe("VariationList", () => {
         selectedId={null}
         sortMode={"all" as SortMode}
         onSelect={onSelect}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="active"
@@ -93,7 +92,6 @@ describe("VariationList", () => {
         selectedId={null}
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="active"
@@ -114,7 +112,6 @@ describe("VariationList", () => {
         selectedId={null}
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="active"
@@ -122,49 +119,6 @@ describe("VariationList", () => {
     );
     const overlay = container.querySelector("li > div > div");
     expect(overlay).toHaveClass("pointer-events-none");
-  });
-
-  it("calls onSortModeChange when a sort button is clicked", async () => {
-    const user = userEvent.setup();
-    const onSortModeChange = vi.fn();
-    render(
-      <VariationList
-        variations={[]}
-        selectedId={null}
-        sortMode={"all" as SortMode}
-        onSelect={noop}
-        onSortModeChange={onSortModeChange}
-        onVote={noop}
-        votingId={null}
-        voterStatus="active"
-      />
-    );
-    await user.click(screen.getByText("Top"));
-    expect(onSortModeChange).toHaveBeenCalledWith("top");
-  });
-
-  it("does not clear the selection when the already-active sort button is clicked", async () => {
-    const user = userEvent.setup();
-    const onSortModeChange = vi.fn();
-    render(
-      <VariationList
-        variations={[]}
-        selectedId={null}
-        sortMode={"all" as SortMode}
-        onSelect={noop}
-        onSortModeChange={onSortModeChange}
-        onVote={noop}
-        votingId={null}
-        voterStatus="active"
-      />
-    );
-    await user.click(screen.getByText("Version"));
-    // react-aria's single-selection toggle group re-fires onSelectionChange
-    // with the same key rather than being a true no-op, but it must never
-    // clear the selection (which would call onSortModeChange(undefined)).
-    for (const call of onSortModeChange.mock.calls) {
-      expect(call[0]).toBe("all");
-    }
   });
 
   // E3: non-selected rows are display-only — plain counts, no vote buttons.
@@ -175,7 +129,6 @@ describe("VariationList", () => {
         selectedId={null}
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="active"
@@ -202,7 +155,6 @@ describe("VariationList", () => {
         selectedId="a"
         sortMode={"all" as SortMode}
         onSelect={onSelect}
-        onSortModeChange={noop}
         onVote={onVote}
         votingId={null}
         voterStatus="active"
@@ -221,7 +173,6 @@ describe("VariationList", () => {
         selectedId="a"
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="active"
@@ -239,7 +190,6 @@ describe("VariationList", () => {
         selectedId="a"
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="active"
@@ -256,7 +206,6 @@ describe("VariationList", () => {
         selectedId="a"
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId={null}
         voterStatus="archived"
@@ -272,7 +221,6 @@ describe("VariationList", () => {
         selectedId="a"
         sortMode={"all" as SortMode}
         onSelect={noop}
-        onSortModeChange={noop}
         onVote={noop}
         votingId="a"
         voterStatus="active"
