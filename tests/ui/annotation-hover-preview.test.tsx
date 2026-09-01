@@ -166,7 +166,9 @@ describe("AnnotationLayer hover/focus preview", () => {
 // preview)" describe block above does — these assertions are about the
 // composer's own behavior, independent of pin placement/selection wiring.
 describe("PinCard (mode: expanded) reply composer", () => {
-  function renderExpanded(overrides: { replies?: VariationComment[]; onReplySubmit?: (text: string) => Promise<boolean> } = {}) {
+  function renderExpanded(
+    overrides: { replies?: VariationComment[]; onReplySubmit?: (text: string) => Promise<boolean>; canManage?: boolean } = {}
+  ) {
     const containerRef = { current: null };
     return render(
       <PinCard
@@ -176,7 +178,7 @@ describe("PinCard (mode: expanded) reply composer", () => {
         pinY={100}
         containerRef={containerRef}
         mode="expanded"
-        canManage={true}
+        canManage={overrides.canManage ?? true}
         onClose={() => {}}
         onToggleStatus={() => {}}
         onRequestDelete={() => {}}
@@ -184,6 +186,16 @@ describe("PinCard (mode: expanded) reply composer", () => {
       />
     );
   }
+
+  // KEV-183: an archived voter is read-only for every viewer, so the reply
+  // composer is gated on `canManage` — same lockout as new-pin creation and
+  // the Complete/Delete actions. Pins stay openable when archived, but the
+  // Reply box must not appear (every submit would 403 server-side).
+  it("does not render the reply composer when the voter is archived (canManage false)", () => {
+    renderExpanded({ canManage: false });
+    expect(screen.queryByLabelText(/^reply$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^send reply$/i)).not.toBeInTheDocument();
+  });
 
   // KEV-183 core requirement: the reply box autofocuses as soon as the card
   // opens, with no extra click needed.

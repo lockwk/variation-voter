@@ -1388,10 +1388,13 @@ export function PinCard({
           the pin. */}
       <PinCardBody comment={comment} replies={expanded ? replies : []} messageRowRef={messageRowRef} />
 
-      {/* Reply composer (KEV-183) — always present in expanded mode, never
-          in preview. See PinCardReplyInput's own doc comment for the
-          autofocus behavior. */}
-      {expanded && <PinCardReplyInput onSubmit={onReplySubmit} />}
+      {/* Reply composer (KEV-183) — present in expanded mode, never in
+          preview, and locked out when the voter is archived (`canManage` is
+          false): an archived voter is read-only for every viewer, same as
+          new-pin creation (stage.tsx) and the manage actions above. Without
+          this gate the box would look usable but every submit would 403.
+          See PinCardReplyInput's own doc comment for the autofocus behavior. */}
+      {expanded && canManage && <PinCardReplyInput onSubmit={onReplySubmit} />}
     </div>
   );
 }
