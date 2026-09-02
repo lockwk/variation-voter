@@ -1,6 +1,6 @@
 {
   "name": "create-variation-voter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Scaffold a self-hosted Variation Voter instance.",
   "bin": {

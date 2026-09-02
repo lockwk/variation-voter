@@ -1,0 +1,42 @@
+# Publishes create-variation-voter to npm using Trusted Publishing (OIDC).
+# No npm token secret is used or needed — authentication happens via GitHub's
+# OIDC identity, which npm exchanges for a short-lived publish credential.
+# Requires npm >= 11.5.1 (the setup-node bundled version is older, so we
+# upgrade it explicitly below), and requires the Trusted Publisher to be
+# configured for this package on npmjs.com (Package Settings > Trusted
+# Publisher, pointing at this repo/workflow) before this will succeed.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# A tag push and a GitHub Release both surface here as the same tag ref, so a
+# single trigger avoids double-publishing. Serialize any overlapping runs too.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: create-variation-voter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm (Trusted Publishing needs npm >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Publish to npm
+        run: npm publish --access public
