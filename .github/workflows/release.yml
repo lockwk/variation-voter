@@ -11,6 +11,10 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual re-publish path: lets us re-run the npm publish from a branch
+  # (default: main) without deleting/moving a released tag — e.g. to recover
+  # from a transient publish failure after the tag was already cut.
+  workflow_dispatch:
 
 # A tag push and a GitHub Release both surface here as the same tag ref, so a
 # single trigger avoids double-publishing. Serialize any overlapping runs too.
