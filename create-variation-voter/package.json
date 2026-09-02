@@ -3,6 +3,11 @@
   "version": "0.1.1",
   "type": "module",
   "description": "Scaffold a self-hosted Variation Voter instance.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lockwk/variation-voter.git",
+    "directory": "create-variation-voter"
+  },
   "bin": {
     "create-variation-voter": "index.mjs"
   },
