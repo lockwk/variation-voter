@@ -43,6 +43,18 @@ changed the picture materially** — two are already fixed, and one is being def
    lifecycle that doesn't port to self-hosters; a shared preview DB plus the non-prod purge (Chunk B)
    covers the actual pain. Revisit only if preview data collisions become real.
 
+   **Amendment (KEV-187):** the shared dev/preview DB remains the **shipped default** — nothing about
+   the self-host install flow or docs changed. Separately, per-*local-workspace* dev+test DB isolation
+   now exists as **dormant, config-gated tooling** (`lib/neon-branches.ts`,
+   `scripts/provision-workspace-db.ts`, `scripts/teardown-workspace-db.ts`), for Kevin's own multi-workspace
+   Conductor setup, not for self-hosters. It activates only when `NEON_API_KEY` + `NEON_PROJECT_ID` are
+   set in the local root's gitignored env files AND `CONDUCTOR_IS_LOCAL=1`; with either absent, `setup`/
+   `archive` behave byte-for-byte as before (shared `damp-sky`/`rapid-glade`, wiped via
+   `scripts/wipe-dev-db.ts`). When configured, each workspace instead gets its own `cw/<workspace>-dev`
+   and `cw/<workspace>-test` Neon branch, forked from `damp-sky`/`rapid-glade`, migrated automatically at
+   setup, and deleted at archive — so concurrent workspaces no longer share (and can't clobber) the same
+   dev/test data. See the env var list documented at the top of `lib/neon-branches.ts`.
+
 3. **KEV-79 dedicated bundle origin (subdomain vs separate project vs other)? → DEFER the whole ticket.**
    Rationale: the isolation only pays off if *untrusted* parties can upload bundles. Today (and under
    the confirmed "all bundles are trusted / agent-built" model) there is no stranger to fence out, so
