@@ -70,9 +70,13 @@ instead:
 ```bash
 npm install
 cp .env.example .env.local   # fill in DATABASE_URL, ADMIN_TOKEN, CRON_SECRET
-npm run db:migrate
+npx drizzle-kit migrate      # run migrations once against your own database
 npm run dev
 ```
+
+(`npm run db:migrate` adds a safety guard that refuses to run against a remote
+database without confirmation — it's for shared-workspace dev, not first-time
+setup — so use `npx drizzle-kit migrate` directly here.)
 
 ### Manual deploy (reference)
 
