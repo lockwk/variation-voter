@@ -15,9 +15,11 @@ time, `[Unreleased]` becomes a dated version heading and a fresh empty
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-02
+
 ### Added
 
-- Voters can now send product feedback about Variation Voter itself straight to the maintainer, via a new "Feedback" link at the bottom of the side panel (KEV-207)
+- Tell the team what you want next — a new "VERVO Feedback" link in the voter's side panel sends your feedback straight to the team (KEV-207)
 
 ## [0.1.0] - 2026-09-02
 
