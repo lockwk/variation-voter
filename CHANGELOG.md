@@ -15,6 +15,10 @@ time, `[Unreleased]` becomes a dated version heading and a fresh empty
 
 ## [Unreleased]
 
+### Added
+
+- `npm run update-variation-voter` updates an existing self-host install to the latest release: it preserves your config and secrets, backs up any app files you edited to `.voter-backup/`, and refreshes the rest — then reminds you to run `npm install` and redeploy (KEV-202)
+
 ### Changed
 
 - Refined the voter side panel: clearer header, comment cards, and layout (KEV-203/204/205)

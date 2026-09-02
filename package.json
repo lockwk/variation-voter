@@ -9,13 +9,15 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:update": "node --test 'scripts/lib/*.test.mjs' 'scripts/*.test.mjs' 'create-variation-voter/*.test.mjs'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/guarded-migrate.ts",
     "db:migrate:test": "tsx scripts/guarded-migrate.ts .env.test.local --auto-confirm",
     "voter": "tsx cli/index.ts",
     "purge:nonprod": "tsx scripts/purge-nonprod.ts",
     "variation:scaffold": "node pipeline/scaffold-variation.mjs",
-    "variation:publish": "tsx pipeline/publish-voter.ts"
+    "variation:publish": "tsx pipeline/publish-voter.ts",
+    "update-variation-voter": "node scripts/update.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
