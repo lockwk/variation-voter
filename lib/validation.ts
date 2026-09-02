@@ -57,3 +57,16 @@ export const commentSchema = z
 export const commentStatusSchema = z.object({
   status: z.enum(["open", "complete"]),
 });
+
+// KEV-207: product feedback from a voter, posted to Linear as a Triage issue
+// (see lib/linear.ts). voterId/path are both optional context — feedback can
+// be submitted from anywhere the Feedback trigger is rendered.
+export const feedbackSchema = z.object({
+  message: z.string().trim().min(1).max(5000),
+  voterId: z.string().trim().min(1).optional(),
+  path: z.string().trim().min(1).optional(),
+  // Origin of the submitting install, used to build a correct Voter deep-link
+  // in the Linear issue (see lib/linear.ts) — this is a cross-origin intake, so
+  // voterId is only meaningful relative to the install it came from.
+  origin: z.string().trim().url().max(2000).optional(),
+});

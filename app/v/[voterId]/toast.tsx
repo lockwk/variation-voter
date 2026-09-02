@@ -1,4 +1,4 @@
-import { MessageCircle01, ThumbsUp, X } from "@untitledui/icons";
+import { AlertCircle, CheckCircle, MessageCircle01, ThumbsUp, X } from "@untitledui/icons";
 import { cx } from "@/utils/cx";
 
 // KEV-161/KEV-189: presentational cards rendered via sonner's `toast.custom`
@@ -77,6 +77,41 @@ export function VoteToast({
         <ThumbsUp aria-hidden="true" className="size-4 shrink-0" color="#E8E8E8" />
         <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-[#E8E8E8]">{message}</span>
       </button>
+      <button
+        type="button"
+        aria-label="Dismiss notification"
+        onClick={onDismiss}
+        className={cx("shrink-0 p-1 -m-1 text-tertiary hover:text-secondary", "cursor-pointer")}
+      >
+        <X className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+// KEV-207: result of a feedback submission (about Variation Voter itself, not
+// a variation). Same card language as CommentToast/VoteToast, but there's
+// nothing to navigate to — the icon + message sit in a plain container
+// instead of a clickable button — and the icon depends on success vs error.
+export function FeedbackToast({
+  message,
+  variant,
+  onDismiss,
+}: {
+  message: string;
+  variant: "success" | "error";
+  onDismiss: () => void;
+}) {
+  const Icon = variant === "success" ? CheckCircle : AlertCircle;
+  return (
+    <div
+      className="flex w-80 items-center gap-2 rounded-lg bg-[#2B2B2B] py-3 pl-3 pr-2 outline-none"
+      style={cardStyle}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <Icon aria-hidden="true" className="size-4 shrink-0" color="#E8E8E8" />
+        <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-[#E8E8E8]">{message}</span>
+      </div>
       <button
         type="button"
         aria-label="Dismiss notification"

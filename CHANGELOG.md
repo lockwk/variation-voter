@@ -15,6 +15,10 @@ time, `[Unreleased]` becomes a dated version heading and a fresh empty
 
 ## [Unreleased]
 
+### Added
+
+- Voters can now send product feedback about Variation Voter itself straight to the maintainer, via a new "Feedback" link at the bottom of the side panel (KEV-207)
+
 ## [0.1.0] - 2026-09-02
 
 First tagged release — the baseline for `npm run update-variation-voter`.

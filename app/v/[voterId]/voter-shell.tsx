@@ -5,6 +5,7 @@ import { Menu02 } from "@untitledui/icons";
 import { MotionConfig } from "motion/react";
 import { Toaster, toast } from "sonner";
 import { ConfirmDialog } from "@/components/application/confirm-dialog";
+import { FeedbackDialog } from "@/components/application/feedback-dialog";
 import type { Comment, VoterDetail, VoteDirection } from "@/db/queries";
 import { computeOptimisticVote } from "@/lib/optimistic-vote";
 import { type SortMode } from "./variation-list";
@@ -12,7 +13,7 @@ import { Rail } from "./rail";
 import { Stage } from "./stage";
 import { HOUSE_SPRING } from "./motion-config";
 import { useVoterPolling } from "./use-voter-polling";
-import { CommentToast, VoteToast } from "./toast";
+import { CommentToast, FeedbackToast, VoteToast } from "./toast";
 
 // The count of OTHER viewers' votes on a variation — mirrors the up/down
 // decomposition in applySnapshot's merge below, so the viewer's own vote
@@ -24,6 +25,17 @@ function othersVoteCount(variation: Pick<VoterDetail["variations"][number], "up"
 }
 
 type SnapshotEntry = { commentIds: Set<string>; othersCount: number };
+
+// KEV-207: intentionally an ABSOLUTE URL, not "/api/feedback". Every
+// self-hosted install ships this same client bundle, and Kevin wants all
+// product feedback — from every install — to land in his own Linear, not
+// scattered across installs that don't have a LINEAR_API_KEY configured. So
+// by default every install's feedback form posts cross-origin to Kevin's
+// canonical deployment. Override with NEXT_PUBLIC_FEEDBACK_ENDPOINT (e.g.
+// pointing at your own instance's /api/feedback) if you want feedback routed
+// to your own Linear instead.
+const FEEDBACK_ENDPOINT =
+  process.env.NEXT_PUBLIC_FEEDBACK_ENDPOINT || "https://variation-voter.vercel.app/api/feedback";
 
 export function VoterShell({
   voter,
@@ -67,6 +79,10 @@ export function VoterShell({
   const [pendingDeleteComment, setPendingDeleteComment] = useState<{ variationId: string; commentId: string } | null>(
     null
   );
+  // KEV-207: the single source of truth for the feedback modal, opened via
+  // the rail's "Feedback" trigger — controlled the same way as
+  // pendingDeleteComment above.
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   // The viewer's own optimistic vote per variationId, keyed while a local
   // vote (in flight or just-reconciled) hasn't yet been confirmed by a poll —
@@ -330,6 +346,51 @@ export function VoterShell({
     setPendingDeleteComment(null);
   }
 
+  // KEV-207: posts product feedback (about Variation Voter itself, not a
+  // variation) to FEEDBACK_ENDPOINT — an absolute URL pointing at Kevin's
+  // canonical deployment by default, since that's where every install's
+  // feedback should land (see FEEDBACK_ENDPOINT above). Includes the current
+  // voterId and path for context on the resulting Linear issue. This request
+  // is cross-origin for every other install, so no `credentials` option is
+  // set — the vv_viewer cookie won't ride along as a third-party cookie,
+  // which is fine, lib/linear.ts already handles an absent viewer. Throws on
+  // failure so FeedbackDialog's submit() keeps the modal open and its caller
+  // (below) can show an error toast — mirrors how submitReply/mutateComment
+  // report failure via state instead, except this dialog owns its own
+  // pending text.
+  async function submitFeedback(message: string) {
+    const response = await fetch(FEEDBACK_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      // Include our own origin so the Linear issue's Voter link resolves
+      // against THIS install, not the (cross-origin) intake deployment.
+      body: JSON.stringify({
+        message,
+        voterId: voter.id,
+        path: window.location.pathname,
+        origin: window.location.origin,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      const errorMessage =
+        response.status === 503
+          ? "Couldn't send feedback right now. Please try again."
+          : (typeof body?.error === "string" ? body.error : undefined) || "Couldn't send feedback. Please try again.";
+      toast.custom(
+        (id) => <FeedbackToast variant="error" message={errorMessage} onDismiss={() => toast.dismiss(id)} />,
+        { duration: 4000 }
+      );
+      throw new Error(errorMessage);
+    }
+    toast.custom(
+      (id) => (
+        <FeedbackToast variant="success" message="Thanks for the feedback!" onDismiss={() => toast.dismiss(id)} />
+      ),
+      { duration: 4000 }
+    );
+  }
+
   // KEV-90: every open tab quietly re-fetches the full voter snapshot every
   // ~5s (see use-voter-polling.ts) so new comments and vote counts from other
   // viewers show up without a refresh. This is the only place merging
@@ -537,6 +598,7 @@ export function VoterShell({
             onSelectPin={selectPin}
             onToggleCommentStatus={toggleCommentStatus}
             onRequestDeleteComment={requestDeleteComment}
+            onOpenFeedback={() => setIsFeedbackOpen(true)}
           />
           <div className="flex flex-1 min-w-0 flex-col">
             <button
@@ -573,6 +635,11 @@ export function VoterShell({
             isDestructive
             onConfirm={confirmDeleteComment}
             onClose={cancelDeleteComment}
+          />
+          <FeedbackDialog
+            isOpen={isFeedbackOpen}
+            onClose={() => setIsFeedbackOpen(false)}
+            onSubmit={submitFeedback}
           />
         </div>
       </>

@@ -2,6 +2,7 @@
 
 import { X } from "@untitledui/icons";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
+import { Button } from "@/components/base/buttons/button";
 import { cx } from "@/utils/cx";
 import { VariationList, type SortMode } from "./variation-list";
 import { CommentsPanel } from "./comments-panel";
@@ -27,6 +28,7 @@ export function Rail({
   onSelectPin,
   onToggleCommentStatus,
   onRequestDeleteComment,
+  onOpenFeedback,
 }: {
   variations: VariationWithAggregates[];
   selected: VariationWithAggregates | null;
@@ -52,6 +54,8 @@ export function Rail({
   /** Opens the shared delete-confirmation modal (voter-shell.tsx), scoped to
    * this comment — the row itself no longer deletes directly. */
   onRequestDeleteComment?: (variationId: string, commentId: string) => void;
+  /** Opens the feedback modal (voter-shell.tsx) — KEV-207. */
+  onOpenFeedback: () => void;
 }) {
   return (
     <nav
@@ -95,6 +99,17 @@ export function Rail({
           onRequestDeleteComment={onRequestDeleteComment}
         />
       </div>
+      {/* KEV-207: pinned to the bottom-left of the rail, respecting the nav's
+          own `p-3` padding — `shrink-0` keeps the flex-1 wrapper above from
+          ever squeezing it out. */}
+      <Button
+        size="sm"
+        color="link-gray"
+        className="shrink-0 self-start"
+        onPress={onOpenFeedback}
+      >
+        VERVO Feedback
+      </Button>
     </nav>
   );
 }
