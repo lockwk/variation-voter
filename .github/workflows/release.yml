@@ -8,11 +8,15 @@
 name: Release
 
 on:
-  release:
-    types: [published]
   push:
     tags:
       - 'v*'
+
+# A tag push and a GitHub Release both surface here as the same tag ref, so a
+# single trigger avoids double-publishing. Serialize any overlapping runs too.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
