@@ -13,7 +13,7 @@ describe("GET /api/voters/:voterId", () => {
 
   it("returns voter, variations, and aggregates with no auth", async () => {
     const voter = await createVoter(db, { title: "Nav refresh" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await castVote(db, variation.id, { direction: "up" });
 
     const response = await GET(new Request(`http://localhost/api/voters/${voter.id}`), {

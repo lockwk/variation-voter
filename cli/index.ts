@@ -37,7 +37,6 @@ program
   .command("add <voterId>")
   .requiredOption("--title <title>")
   .option("--description <description>")
-  .option("--url <url>", "no longer supported — creating new url variations is blocked")
   .option("--image <url>")
   .option("--embed <html>")
   .action(async (voterId, options) => {

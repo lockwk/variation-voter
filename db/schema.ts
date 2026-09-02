@@ -1,7 +1,7 @@
 import { pgTable, text, integer, timestamp, pgEnum, uniqueIndex, real, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const voterStatus = pgEnum("voter_status", ["active", "archived"]);
-export const variationKind = pgEnum("variation_kind", ["url", "image", "embed", "app"]);
+export const variationKind = pgEnum("variation_kind", ["image", "embed", "app"]);
 export const voteDirection = pgEnum("vote_direction", ["up", "down"]);
 export const commentAnchorType = pgEnum("comment_anchor_type", ["element", "point"]);
 export const commentStatus = pgEnum("comment_status", ["open", "complete"]);

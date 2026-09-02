@@ -57,12 +57,10 @@ export function Stage({
 }) {
   const [commentMode, setCommentMode] = useState(false);
 
-  // Pin placement applies to any media we can safely anchor against — `app`
-  // (same-origin iframe), `image` (X/Y point), and `embed` (sanitized HTML
-  // injected straight into this document, so its DOM is directly reachable —
-  // see EmbedHtml below). `url` stays excluded: it's an arbitrary
-  // cross-origin iframe with no same-document DOM to hit-test, and is no
-  // longer creatable at all (KEV-172) — existing rows just render read-only.
+  // Pin placement applies to every variation kind — `app` (same-origin
+  // iframe), `image` (X/Y point), and `embed` (sanitized HTML injected
+  // straight into this document, so its DOM is directly reachable — see
+  // EmbedHtml below).
   const supportsAnnotation = variation?.kind === "app" || variation?.kind === "image" || variation?.kind === "embed";
   const canAnnotate = Boolean(supportsAnnotation && voterStatus !== "archived" && voterId && onCommentSubmit);
 
@@ -184,23 +182,13 @@ function VariationMedia({
   // ref on their first render.
   const [embedReady, setEmbedReady] = useState(false);
 
-  if (variation.kind === "url") {
-    return (
-      <iframe
-        title={variation.title}
-        src={variation.src}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-        className="w-full h-full min-h-[400px] border-0"
-      />
-    );
-  }
   if (variation.kind === "app") {
-    // Same sandbox posture as the `url` kind: `allow-scripts allow-same-origin`
-    // renders reliably (a stricter opaque-origin sandbox breaks the bundle's
-    // ES module loading — blank render). App bundles are admin/agent-built and
-    // served from our own origin, so this is an acceptable interim posture;
-    // stronger isolation via a dedicated bundle origin is tracked in KEV-79.
-    // That same same-origin posture is what lets AnnotationLayer read
+    // `allow-scripts allow-same-origin` renders reliably (a stricter
+    // opaque-origin sandbox breaks the bundle's ES module loading — blank
+    // render). App bundles are admin/agent-built and served from our own
+    // origin, so this is an acceptable interim posture; stronger isolation
+    // via a dedicated bundle origin is tracked in KEV-79. That same
+    // same-origin posture is what lets AnnotationLayer read
     // `iframe.contentDocument` for element-anchored pins below.
     return (
       <div ref={containerRef} className="relative w-full h-full min-h-[400px]">

@@ -39,7 +39,7 @@ function commentActionRequest(method: "PATCH" | "DELETE", body: unknown, viewerI
 describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
   it("succeeds without a prior vote", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(
       commentRequest("comments", { comment: "nice", voterName: "Kevin" }, "viewer-1"),
@@ -54,7 +54,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("returns the commenter's own vote direction via getVoterDetail when they also voted", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     await postVote(commentRequest("votes", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -71,7 +71,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("rejects an invalid body", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(commentRequest("comments", {}, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -81,7 +81,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("rejects a name-only body with 400, not 500", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(commentRequest("comments", { voterName: "Kevin" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -92,7 +92,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
   it("404s when the variation doesn't belong to the voter", async () => {
     const voterA = await createVoter(db, { title: "A" });
     const voterB = await createVoter(db, { title: "B" });
-    const variation = await addVariation(db, voterA.id, { title: "x", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voterA.id, { title: "x", kind: "embed", src: "https://a" });
 
     const response = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voterB.id, variationId: variation.id }),
@@ -102,7 +102,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("403s when the voter is archived", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await closeVoter(db, voter.id);
 
     const response = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
@@ -113,7 +113,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("accepts an element-anchored pin with a selector", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(
       commentRequest(
@@ -133,7 +133,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("rejects an element anchor without a selector", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(
       commentRequest("comments", { comment: "x", anchorType: "element" }, "viewer-1"),
@@ -144,7 +144,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("accepts a point-anchored pin with fractional coordinates", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(
       commentRequest(
@@ -164,7 +164,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
   it("rejects out-of-range coordinates", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await postComment(
       commentRequest("comments", { comment: "x", offsetX: 1.5, offsetY: 0.5 }, "viewer-1"),
@@ -178,7 +178,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
   describe("replies (parentCommentId)", () => {
     it("accepts a reply to a root comment", async () => {
       const voter = await createVoter(db, { title: "x" });
-      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
       const rootResponse = await postComment(commentRequest("comments", { comment: "root" }, "viewer-1"), {
         params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
       });
@@ -204,7 +204,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
     it("404s when the reply's parent doesn't exist on this variation", async () => {
       const voter = await createVoter(db, { title: "x" });
-      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
       const response = await postComment(
         commentRequest("comments", { comment: "orphan", parentCommentId: "nonexistent-id" }, "viewer-1"),
@@ -217,7 +217,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
     // itself be replied to.
     it("rejects a reply-to-a-reply with a 4xx", async () => {
       const voter = await createVoter(db, { title: "x" });
-      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
       const rootResponse = await postComment(commentRequest("comments", { comment: "root" }, "viewer-1"), {
         params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
       });
@@ -238,7 +238,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 
     it("403s a reply when the voter is archived", async () => {
       const voter = await createVoter(db, { title: "x" });
-      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
       const rootResponse = await postComment(commentRequest("comments", { comment: "root" }, "viewer-1"), {
         params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
       });
@@ -257,7 +257,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/comments", () => {
 describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId", () => {
   it("lets the author mark a pin complete and reopen it", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
@@ -282,7 +282,7 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
   // complete/reopen any comment, not just its original author.
   it("lets a non-author viewer update another viewer's comment status", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
@@ -297,7 +297,7 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
 
   it("403s for a nonexistent comment id", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await patchComment(commentActionRequest("PATCH", { status: "complete" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id, commentId: "nonexistent-id" }),
@@ -307,7 +307,7 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
 
   it("rejects an invalid status value", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
@@ -321,7 +321,7 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
 
   it("403s when the voter is archived", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
@@ -338,7 +338,7 @@ describe("PATCH /api/voters/:voterId/variations/:variationId/comments/:commentId
 describe("DELETE /api/voters/:voterId/variations/:variationId/comments/:commentId", () => {
   it("lets the author delete their own pin", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
@@ -357,7 +357,7 @@ describe("DELETE /api/voters/:voterId/variations/:variationId/comments/:commentI
   // delete any comment, not just its original author.
   it("lets a non-author viewer delete another viewer's comment", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const created = await postComment(commentRequest("comments", { comment: "x" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
     });
@@ -374,7 +374,7 @@ describe("DELETE /api/voters/:voterId/variations/:variationId/comments/:commentI
 
   it("403s when deleting a nonexistent comment id", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await deleteCommentRoute(commentActionRequest("DELETE", undefined, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id, commentId: "nonexistent-id" }),

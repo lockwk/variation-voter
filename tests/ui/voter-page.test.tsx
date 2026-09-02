@@ -17,24 +17,24 @@ afterEach(() => {
 describe("voter page routes", () => {
   it("renders the shell with the first variation selected by default", async () => {
     const voter = await createVoter(db, { title: "Nav refresh" });
-    await addVariation(db, voter.id, { title: "Option A", kind: "url", src: "https://a" });
+    await addVariation(db, voter.id, { title: "Option A", kind: "image", src: "https://a" });
 
     const jsx = await VoterPage({ params: Promise.resolve({ voterId: voter.id }) });
     render(jsx);
 
-    expect(screen.getByTitle("Option A")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Option A" })).toBeInTheDocument();
   });
 
   it("renders the shell with a deep-linked variation selected", async () => {
     const voter = await createVoter(db, { title: "Nav refresh" });
-    await addVariation(db, voter.id, { title: "Option A", kind: "url", src: "https://a" });
-    const b = await addVariation(db, voter.id, { title: "Option B", kind: "url", src: "https://b" });
+    await addVariation(db, voter.id, { title: "Option A", kind: "image", src: "https://a" });
+    const b = await addVariation(db, voter.id, { title: "Option B", kind: "image", src: "https://b" });
 
     const jsx = await VoterVariationPage({
       params: Promise.resolve({ voterId: voter.id, variationId: b.id }),
     });
     render(jsx);
 
-    expect(screen.getByTitle("Option B")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Option B" })).toBeInTheDocument();
   });
 });

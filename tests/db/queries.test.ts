@@ -39,8 +39,8 @@ describe("createVoter", () => {
 describe("addVariation", () => {
   it("assigns sequential positions in insertion order", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const a = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const b = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
+    const a = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
+    const b = await addVariation(db, voter.id, { title: "B", kind: "embed", src: "https://b" });
     expect(a.position).toBe(0);
     expect(b.position).toBe(1);
   });
@@ -77,7 +77,7 @@ describe("closeVoter / deleteVoter", () => {
 
   it("hard-deletes a voter and cascades to variations/votes", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await castVote(db, variation.id, { direction: "up" });
 
     await deleteVoter(db, voter.id);
@@ -91,21 +91,21 @@ describe("closeVoter / deleteVoter", () => {
       vi.restoreAllMocks();
     });
 
-    it("deletes the bundle for an app variation, but not for a url variation or the voter id", async () => {
+    it("deletes the bundle for an app variation, but not for a non-app variation or the voter id", async () => {
       const voter = await createVoter(db, { title: "x" });
       const appVariation = await addVariation(db, voter.id, {
         title: "App",
         kind: "app",
         src: `/apps/pending/index.html`,
       });
-      const urlVariation = await addVariation(db, voter.id, { title: "URL", kind: "url", src: "https://a" });
+      const embedVariation = await addVariation(db, voter.id, { title: "Embed", kind: "embed", src: "https://a" });
 
       const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
 
       await deleteVoter(db, voter.id);
 
       expect(deleteBundle).toHaveBeenCalledWith(appVariation.id);
-      expect(deleteBundle).not.toHaveBeenCalledWith(urlVariation.id);
+      expect(deleteBundle).not.toHaveBeenCalledWith(embedVariation.id);
       expect(deleteBundle).not.toHaveBeenCalledWith(voter.id);
       expect(deleteBundle).toHaveBeenCalledTimes(1);
     });
@@ -173,7 +173,7 @@ describe("getVoterDetail", () => {
 
   it("aggregates up/down counts, score, and comments per variation", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await castVote(db, variation.id, { direction: "up" });
     await castVote(db, variation.id, { direction: "up", viewerId: "commenter-1" });
     await createComment(db, { variationId: variation.id, viewerId: "commenter-1", comment: "great", voterName: "Kevin" });
@@ -193,7 +193,7 @@ describe("getVoterDetail", () => {
 
   it("reports the given viewer's own vote and flags their own comment", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
     await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "mine" });
     await toggleVote(db, variation.id, "viewer-2", "down");
@@ -212,9 +212,9 @@ describe("getVoterDetail", () => {
 
   it("returns variations ordered by position, not insertion/query order", async () => {
     const voter = await createVoter(db, { title: "ordering" });
-    const a = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const b = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
-    const c = await addVariation(db, voter.id, { title: "C", kind: "url", src: "https://c" });
+    const a = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
+    const b = await addVariation(db, voter.id, { title: "B", kind: "embed", src: "https://b" });
+    const c = await addVariation(db, voter.id, { title: "C", kind: "embed", src: "https://c" });
 
     const detail = await getVoterDetail(db, voter.id);
     expect(detail?.variations.map((v) => v.id)).toEqual([a.id, b.id, c.id]);
@@ -224,7 +224,7 @@ describe("getVoterDetail", () => {
 describe("castVote", () => {
   it("stores an anonymous up-vote", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const vote = await castVote(db, variation.id, { direction: "up" });
     expect(vote.direction).toBe("up");
   });
@@ -233,7 +233,7 @@ describe("castVote", () => {
 describe("toggleVote", () => {
   it("inserts a vote when the viewer has none yet", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const result = await toggleVote(db, variation.id, "viewer-1", "up");
 
@@ -244,7 +244,7 @@ describe("toggleVote", () => {
 
   it("undoes the vote when the viewer repeats their own direction", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
 
     const result = await toggleVote(db, variation.id, "viewer-1", "up");
@@ -257,7 +257,7 @@ describe("toggleVote", () => {
 
   it("switches direction when the viewer picks the opposite one", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
 
     const result = await toggleVote(db, variation.id, "viewer-1", "down");
@@ -271,7 +271,7 @@ describe("toggleVote", () => {
 
   it("lets two different viewers each hold their own vote on the same variation", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     await toggleVote(db, variation.id, "viewer-1", "up");
     await toggleVote(db, variation.id, "viewer-2", "up");
@@ -284,7 +284,7 @@ describe("toggleVote", () => {
 describe("createComment", () => {
   it("creates a comment even when the viewer has no vote on the variation", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const comment = await createComment(db, {
       variationId: variation.id,
@@ -309,7 +309,7 @@ describe("createComment", () => {
 
   it("stores an element anchor's selector, and a point anchor's offsets", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const elementPin = await createComment(db, {
       variationId: variation.id,
@@ -336,7 +336,7 @@ describe("createComment", () => {
 
   it("creates a new row rather than upserting when the same viewer comments again on the same variation", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const first = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "first pin" });
     const second = await createComment(db, {
@@ -357,8 +357,8 @@ describe("createComment", () => {
   describe("seq (frozen pin numbering)", () => {
     it("assigns 1, 2, 3... in insertion order, scoped per variation", async () => {
       const voter = await createVoter(db, { title: "x" });
-      const variationA = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-      const variationB = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
+      const variationA = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
+      const variationB = await addVariation(db, voter.id, { title: "B", kind: "embed", src: "https://b" });
 
       const a1 = await createComment(db, { variationId: variationA.id, viewerId: "v1", comment: "a1" });
       const a2 = await createComment(db, { variationId: variationA.id, viewerId: "v1", comment: "a2" });
@@ -373,7 +373,7 @@ describe("createComment", () => {
 
     it("never reuses a seq after the comment holding it is deleted", async () => {
       const voter = await createVoter(db, { title: "x" });
-      const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+      const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
       const first = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "first" });
       const second = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "second" });
@@ -393,7 +393,7 @@ describe("createComment", () => {
 
   it("reflects the commenter's vote direction when they've also voted", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await castVote(db, variation.id, { direction: "up", viewerId: "viewer-1" });
 
     await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "too busy" });
@@ -406,7 +406,7 @@ describe("createComment", () => {
 
   it("leaves the comment intact, now with a null direction, after the vote it was tied to is undone", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await toggleVote(db, variation.id, "viewer-1", "up");
     await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "mine" });
 
@@ -428,7 +428,7 @@ describe("createComment", () => {
 describe("createReply", () => {
   it("creates a reply pointing at the root comment, without bumping seq or commentSeq", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
     expect(root.seq).toBe(1);
 
@@ -456,7 +456,7 @@ describe("createReply", () => {
 
   it("rejects a reply whose parentCommentId doesn't exist", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const result = await createReply(db, {
       variationId: variation.id,
@@ -470,8 +470,8 @@ describe("createReply", () => {
 
   it("rejects a reply whose parent belongs to a different variation", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variationA = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
-    const variationB = await addVariation(db, voter.id, { title: "B", kind: "url", src: "https://b" });
+    const variationA = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
+    const variationB = await addVariation(db, voter.id, { title: "B", kind: "embed", src: "https://b" });
     const root = await createComment(db, { variationId: variationA.id, viewerId: "v1", comment: "root on A" });
 
     const result = await createReply(db, {
@@ -488,7 +488,7 @@ describe("createReply", () => {
   // targeted by another reply — only root comments accept replies.
   it("rejects a reply-to-a-reply", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
     const firstReply = await createReply(db, {
       variationId: variation.id,
@@ -511,7 +511,7 @@ describe("createReply", () => {
 
   it("cascade-deletes a root's replies when the root is deleted", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
     const reply = await createReply(db, {
       variationId: variation.id,
@@ -530,7 +530,7 @@ describe("createReply", () => {
 
   it("exposes the reply's parentCommentId, and the root's null parentCommentId, via getVoterDetail", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const root = await createComment(db, { variationId: variation.id, viewerId: "v1", comment: "root" });
     const reply = await createReply(db, {
       variationId: variation.id,
@@ -552,7 +552,7 @@ describe("createReply", () => {
 describe("updateCommentStatus", () => {
   it("updates the status of the author's own comment", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
     const updated = await updateCommentStatus(db, { id: comment.id, status: "complete" });
@@ -565,7 +565,7 @@ describe("updateCommentStatus", () => {
   // restriction at the query layer.
   it("updates the status of a comment belonging to a different viewer", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
     const result = await updateCommentStatus(db, { id: comment.id, status: "complete" });
@@ -584,7 +584,7 @@ describe("updateCommentStatus", () => {
 describe("deleteComment", () => {
   it("deletes the author's own comment and reports success", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
     const deleted = await deleteComment(db, { id: comment.id });
@@ -599,7 +599,7 @@ describe("deleteComment", () => {
   // at the query layer.
   it("deletes a comment belonging to a different viewer, and reports success", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     const comment = await createComment(db, { variationId: variation.id, viewerId: "viewer-1", comment: "fix" });
 
     const deleted = await deleteComment(db, { id: comment.id });
@@ -668,7 +668,7 @@ describe("purgeExpiredAndArchivedVoters", () => {
         kind: "app",
         src: `/apps/pending/index.html`,
       });
-      const urlVariation = await addVariation(db, voter.id, { title: "URL", kind: "url", src: "https://a" });
+      const embedVariation = await addVariation(db, voter.id, { title: "Embed", kind: "embed", src: "https://a" });
 
       const deleteBundle = vi.spyOn(getStorage(), "deleteBundle").mockResolvedValue(undefined);
 
@@ -676,7 +676,7 @@ describe("purgeExpiredAndArchivedVoters", () => {
 
       expect(deletedIds).toContain(voter.id);
       expect(deleteBundle).toHaveBeenCalledWith(appVariation.id);
-      expect(deleteBundle).not.toHaveBeenCalledWith(urlVariation.id);
+      expect(deleteBundle).not.toHaveBeenCalledWith(embedVariation.id);
       expect(deleteBundle).toHaveBeenCalledTimes(1);
     });
 

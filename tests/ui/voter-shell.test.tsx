@@ -27,7 +27,7 @@ function makeVoter(overrides: Partial<VoterDetail> = {}): VoterDetail {
         id: "a",
         title: "Option A",
         description: null,
-        kind: "url",
+        kind: "image",
         src: "https://preview.example/a",
         position: 0,
         createdAt: new Date(),
@@ -41,7 +41,7 @@ function makeVoter(overrides: Partial<VoterDetail> = {}): VoterDetail {
         id: "b",
         title: "Option B",
         description: null,
-        kind: "url",
+        kind: "image",
         src: "https://preview.example/b",
         position: 1,
         createdAt: new Date(),
@@ -86,7 +86,7 @@ function makeVoterWithOwnComment(comment: VariationComment = makeOwnComment()): 
         id: "a",
         title: "Option A",
         description: null,
-        kind: "url",
+        kind: "image",
         src: "https://preview.example/a",
         position: 0,
         createdAt: new Date(),
@@ -100,7 +100,7 @@ function makeVoterWithOwnComment(comment: VariationComment = makeOwnComment()): 
         id: "b",
         title: "Option B",
         description: null,
-        kind: "url",
+        kind: "image",
         src: "https://preview.example/b",
         position: 1,
         createdAt: new Date(),
@@ -133,7 +133,7 @@ function stubApiFetch(handler: (url: string, init?: RequestInit) => Response | P
 describe("VoterShell", () => {
   it("selects the first variation by default and shows its stage", () => {
     render(<VoterShell voter={makeVoter()} initialVariationId="a" />);
-    expect(screen.getByTitle("Option A")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Option A" })).toBeInTheDocument();
   });
 
   it("switches the stage and updates the URL when a different variation is clicked", async () => {
@@ -147,7 +147,7 @@ describe("VoterShell", () => {
     // accessible name, not by querying the text node.
     await user.click(screen.getByRole("button", { name: "V2 Option B" }));
 
-    expect(screen.getByTitle("Option B")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Option B" })).toBeInTheDocument();
     expect(replaceStateSpy).toHaveBeenCalledWith(null, "", "/v/voter1/b");
   });
 

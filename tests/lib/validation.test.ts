@@ -22,22 +22,6 @@ describe("createVoterSchema", () => {
 });
 
 describe("addVariationSchema", () => {
-  // KEV-172: new "url" variations can no longer be created — they're a
-  // cross-origin iframe with no same-document DOM to hit-test, so they can't
-  // support pinned comments the way every other kind now requires. Existing
-  // rows are untouched (the DB enum still has "url"), only creation is blocked.
-  it("rejects a url variation with a clear, specific error", () => {
-    const result = addVariationSchema.safeParse({
-      title: "Live default",
-      kind: "url",
-      src: "https://preview.example/a",
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0].message).toMatch(/no longer supported/i);
-    }
-  });
-
   it("accepts an image variation", () => {
     const result = addVariationSchema.safeParse({
       title: "Screenshot",

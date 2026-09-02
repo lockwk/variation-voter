@@ -50,6 +50,13 @@
       "when": 1788208213788,
       "tag": "0006_normal_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788359853298,
+      "tag": "0007_remove_url_variation_kind",
+      "breakpoints": true
     }
   ]
 }
