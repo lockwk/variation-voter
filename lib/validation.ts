@@ -12,29 +12,16 @@ export const createVoterSchema = z.object({
 // back a `kind:"app"` entry, so allowing it here would let a caller create a
 // broken app variation with an arbitrary `src` and no bundle behind it.
 //
-// KEV-172: new "url" variations are blocked at creation too, via the
-// `.refine` below rather than dropping it from the `kind` enum outright — a
-// dedicated refine gives callers (the admin API, cli/index.ts's `add`
-// command) a specific, actionable error message instead of zod's generic
-// "invalid enum value". `url` is a cross-origin iframe with no same-document
-// DOM to hit-test, so it can't support pinned comments the way `app`/`image`/
-// `embed` do (see app/v/[voterId]/annotation-layer.tsx) — every other
-// variation kind now places comments exclusively via pins, so a kind with no
-// pin support has no way to comment on it at all. Existing `url` rows are
-// untouched (the `variation_kind` DB enum still includes it, see
-// db/schema.ts) and keep rendering read-only; full removal is a follow-up.
-export const addVariationSchema = z
-  .object({
-    title: z.string().trim().min(1).max(200),
-    description: z.string().trim().max(2000).optional(),
-    kind: z.enum(["url", "image", "embed"]),
-    src: z.string().trim().min(1),
-  })
-  .refine((data) => data.kind !== "url", {
-    message:
-      'Creating new "url" variations is no longer supported — cross-origin content can\'t support pinned comments. Use "embed" or "image" instead.',
-    path: ["kind"],
-  });
+// KEV-182: the "url" kind (a cross-origin iframe with no same-document DOM to
+// hit-test, so it couldn't support pinned comments) has been removed
+// entirely — from this schema, the `variation_kind` DB enum, and the render
+// path.
+export const addVariationSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).optional(),
+  kind: z.enum(["image", "embed"]),
+  src: z.string().trim().min(1),
+});
 
 export const castVoteSchema = z.object({
   direction: z.enum(["up", "down"]),

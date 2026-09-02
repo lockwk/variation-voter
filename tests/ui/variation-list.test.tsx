@@ -18,7 +18,7 @@ function makeVariation(overrides: Partial<VariationWithAggregates>): VariationWi
     id: "id",
     title: "Title",
     description: null,
-    kind: "url",
+    kind: "embed",
     src: "https://example.com",
     position: 0,
     createdAt: new Date("2026-01-01"),

@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
-// Seeds a demo voter with a single "url" variation pointing at the built
-// pick-duel Vite app served from public/variations/pick-duel/. Proves the
-// voter shell can render a self-contained, interactive React build via the
-// existing kind: "url" iframe — no schema/stage.tsx changes required.
+// Seeds a demo voter with a single "app" variation pointing at the built
+// pick-duel Vite app served from public/variations/pick-duel/. "app" is the
+// correct kind for a self-contained, interactive React build — it also
+// enables pinned annotation on the rendered bundle (see stage.tsx).
 //
 // Idempotent — skips if a voter with SEED_TITLE already exists.
 
@@ -28,7 +28,7 @@ async function main() {
 
   await addVariation(db, voter.id, {
     title: "Pick your vibe (built React app)",
-    kind: "url",
+    kind: "app",
     src: "/variations/pick-duel/index.html",
   });
 

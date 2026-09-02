@@ -21,7 +21,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
   it("404s when the variation doesn't belong to the voter", async () => {
     const voterA = await createVoter(db, { title: "A" });
     const voterB = await createVoter(db, { title: "B" });
-    const variation = await addVariation(db, voterA.id, { title: "x", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voterA.id, { title: "x", kind: "embed", src: "https://a" });
 
     const response = await POST(voteRequest("POST", { direction: "up" }), {
       params: Promise.resolve({ voterId: voterB.id, variationId: variation.id }),
@@ -31,7 +31,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
   it("403s when the voter is archived", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
     await closeVoter(db, voter.id);
 
     const response = await POST(voteRequest("POST", { direction: "up" }), {
@@ -42,7 +42,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
   it("rejects an invalid body", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await POST(voteRequest("POST", { direction: "sideways" }), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -52,7 +52,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
   it("records an anonymous vote", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const response = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -65,7 +65,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
   it("toggles: voting the same direction again undoes the vote", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -82,7 +82,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
   it("switches: voting the opposite direction flips the existing vote", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),
@@ -99,7 +99,7 @@ describe("POST /api/voters/:voterId/variations/:variationId/votes", () => {
 
   it("lets two different viewers each cast their own vote", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "A", kind: "url", src: "https://a" });
+    const variation = await addVariation(db, voter.id, { title: "A", kind: "embed", src: "https://a" });
 
     const first = await POST(voteRequest("POST", { direction: "up" }, "viewer-1"), {
       params: Promise.resolve({ voterId: voter.id, variationId: variation.id }),

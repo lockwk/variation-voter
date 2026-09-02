@@ -18,7 +18,7 @@ function makeVariation(overrides: Partial<VariationWithAggregates>): VariationWi
     id: "a",
     title: "Option A",
     description: null,
-    kind: "url",
+    kind: "embed",
     src: "https://preview.example/a",
     position: 0,
     createdAt: new Date(),
@@ -59,7 +59,7 @@ afterEach(() => vi.restoreAllMocks());
 // for every kind, with no way to author a new comment from here.
 describe("CommentsPanel", () => {
   it("never renders a plain-text composer, for any variation kind", () => {
-    for (const kind of ["app", "image", "embed", "url"] as const) {
+    for (const kind of ["app", "image", "embed"] as const) {
       cleanup();
       render(<CommentsPanel variation={makeVariation({ kind })} onSelectPin={() => {}} />);
       expect(screen.queryByLabelText(/add a comment about option a/i)).not.toBeInTheDocument();

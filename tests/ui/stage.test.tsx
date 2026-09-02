@@ -16,7 +16,7 @@ const base: VariationWithAggregates = {
   id: "a",
   title: "Option A",
   description: "The current live version",
-  kind: "url",
+  kind: "image",
   src: "https://preview.example/a",
   position: 0,
   createdAt: new Date(),
@@ -34,14 +34,6 @@ describe("Stage", () => {
   it("shows an empty state when nothing is selected", () => {
     render(<Stage variation={null} />);
     expect(screen.getByText(/no variation selected/i)).toBeInTheDocument();
-  });
-
-  it("renders a sandboxed iframe for kind 'url'", () => {
-    render(<Stage variation={base} />);
-    const iframe = screen.getByTitle("Option A");
-    expect(iframe.tagName).toBe("IFRAME");
-    expect(iframe).toHaveAttribute("src", "https://preview.example/a");
-    expect(iframe).toHaveAttribute("sandbox");
   });
 
   it("renders an img for kind 'image'", () => {
@@ -90,10 +82,8 @@ describe("Stage", () => {
   });
 
   // KEV-172 (all-kinds-use-pins pass): app/image/embed all place comments via
-  // pins now, so the comment-mode toggle shows for all three; `url` is a
-  // cross-origin iframe with no same-document DOM to hit-test and is no
-  // longer creatable at all, so it stays excluded.
-  it("shows the comment-mode toggle for app, image, and embed but not url", async () => {
+  // pins now, so the comment-mode toggle shows for all three variation kinds.
+  it("shows the comment-mode toggle for app, image, and embed", async () => {
     for (const kind of ["app", "image", "embed"] as const) {
       cleanup();
       render(
@@ -106,9 +96,5 @@ describe("Stage", () => {
       );
       expect(await screen.findByLabelText(/^add a comment$/i)).toBeInTheDocument();
     }
-
-    cleanup();
-    render(<Stage variation={base} voterId="voter1" voterStatus="active" onCommentSubmit={() => {}} />);
-    expect(screen.queryByLabelText(/^add a comment$/i)).not.toBeInTheDocument();
   });
 });

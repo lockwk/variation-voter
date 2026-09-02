@@ -37,7 +37,7 @@ describe("POST /api/admin/voters/:voterId/close", () => {
 describe("DELETE /api/admin/voters/:voterId", () => {
   it("hard-deletes an existing voter and cascades to variations and votes", async () => {
     const voter = await createVoter(db, { title: "x" });
-    const variation = await addVariation(db, voter.id, { title: "v", kind: "url", src: "http://x" });
+    const variation = await addVariation(db, voter.id, { title: "v", kind: "embed", src: "http://x" });
     const vote = await castVote(db, variation.id, { direction: "up" });
 
     const response = await deleteVoterRoute(authed(`http://localhost/x/${voter.id}`, "DELETE"), {
