@@ -15,6 +15,17 @@ time, `[Unreleased]` becomes a dated version heading and a fresh empty
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-02
+
+First tagged release — the baseline for `npm run update-variation-voter`.
+Fresh installs now pull this tagged version instead of the moving `main`
+branch. (See the GitHub release notes for the full product summary; going
+forward each release lists only its own changes.)
+
+### Added
+
+- `npm run update-variation-voter` updates an existing self-host install to the latest release: it preserves your config and secrets, backs up any app files you edited to `.voter-backup/`, and refreshes the rest — then reminds you to run `npm install` and redeploy (KEV-202)
+
 ### Changed
 
 - Refined the voter side panel: clearer header, comment cards, and layout (KEV-203/204/205)
