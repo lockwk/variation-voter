@@ -1,13 +1,24 @@
 // create-variation-voter/index.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 import { install } from "./index.mjs";
+
+const INDEX_MJS_PATH = fileURLToPath(new URL("./index.mjs", import.meta.url));
 
 const REPO_SLUG = "lockwk/variation-voter";
 
@@ -217,6 +228,39 @@ test("throws when target directory exists and is not empty", async () => {
       /already exists and is not empty/
     );
   } finally {
+    rmSync(target, { recursive: true, force: true });
+  }
+});
+
+test("CLI entry runs when invoked through a symlink (npx bin shim regression)", () => {
+  const { workDir, tarPath } = makeFixtureTarball();
+  const binDir = join(workDir, "bin");
+  mkdirSync(binDir, { recursive: true });
+  const symlinkPath = join(binDir, "create-variation-voter");
+  symlinkSync(INDEX_MJS_PATH, symlinkPath);
+
+  const target = makeTmpDir("cvv-target-symlink-");
+  try {
+    const result = spawnSync(process.execPath, [symlinkPath, target], {
+      env: { ...process.env, VARIATION_VOTER_SOURCE: tarPath },
+      encoding: "utf8",
+    });
+
+    assert.equal(
+      result.status,
+      0,
+      `expected exit code 0, got ${result.status}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`
+    );
+    assert.ok(
+      existsSync(join(target, ".voter-manifest.json")),
+      "expected .voter-manifest.json to be written by main() when run through a symlink"
+    );
+    assert.ok(
+      existsSync(join(target, ".env.local")),
+      "expected .env.local to be written by main() when run through a symlink"
+    );
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
     rmSync(target, { recursive: true, force: true });
   }
 });
