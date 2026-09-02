@@ -15,10 +15,11 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const REPO_SLUG = "lockwk/variation-voter";
@@ -288,7 +289,17 @@ async function main() {
   await install({ target });
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isCliEntry() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry);
+  } catch {
+    return false;
+  }
+}
+
+if (isCliEntry()) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);
