@@ -20,11 +20,42 @@ to Variation Voter (Keep a Changelog format).
 
 ## Versioning
 
-Two version numbers exist, and they move independently:
+Two `package.json` files carry a version number, and they're kept in
+**lockstep** (always the same number):
 
 - The **root app** (`variation-voter`, `private: true`) is never published to
   npm. Its user-facing changes are what `CHANGELOG.md` tracks.
 - **`create-variation-voter/`** is the npm scaffolder (`npx
-  create-variation-voter`). Bump its version only when that tool's own behavior
-  changes (different setup prompts, generated files, etc.) — not for general
-  product changes.
+  create-variation-voter`).
+
+`npm run release` (below) bumps both together, so there's nothing to do by
+hand here — just keep `CHANGELOG.md` up to date as you go.
+
+## Releasing
+
+One command ships a release: `npm run release <version|patch|minor|major>`.
+
+- `<version>` can be an exact version (`0.3.0`) or a bump keyword (`patch`,
+  `minor`, `major`), computed from the current version in the root
+  `package.json`.
+- The release notes are pulled **verbatim** from whatever's under
+  `## [Unreleased]` in `CHANGELOG.md` — so add notes there before releasing
+  (see "Release notes" above). If `[Unreleased]` is empty, the script stops
+  and tells you there's nothing to release.
+- It shows you the new version and the exact notes, then asks
+  `Publish this release? [y/N]` before doing anything. Answer anything other
+  than `y`/`yes` and it stops — nothing is changed. Pass `--yes` to skip the
+  prompt (useful for CI or non-interactive runs).
+- Before asking, it checks that your working tree is clean, you're on `main`
+  and up to date with `origin/main`, the tag doesn't already exist, and
+  `gh` (GitHub CLI) is installed and logged in — if any of those fail, it
+  tells you what to fix and stops.
+- Once confirmed, it: bumps both `package.json` versions to the same number,
+  refreshes `package-lock.json`, turns `## [Unreleased]` in `CHANGELOG.md`
+  into a dated version heading (and starts a fresh empty `[Unreleased]`),
+  commits, tags, and pushes to `main` — then creates the GitHub release
+  (marked "Latest"), which is what `npx create-variation-voter` and
+  `npm run update-variation-voter` both pick up.
+- The tag push also kicks off the npm publish of `create-variation-voter` in
+  the background (`.github/workflows/release.yml`) — the script tells you
+  how to watch it (`gh run watch`), but you don't need to do anything else.
